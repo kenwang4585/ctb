@@ -1,0 +1,78 @@
+
+<!-- Ken wang, Jan, 2020 -->
+<html>
+    <head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+
+        {% block title %}
+            <title>AutoCTB</title>
+        {% endblock %}
+        {% block style %}
+            <link rel="stylesheet" href="https://cdn.staticfile.org/twitter-bootstrap/3.3.7/css/bootstrap.min.css">
+            <script src="https://cdn.staticfile.org/jquery/2.1.1/jquery.min.js"></script>
+            <script src="https://cdn.staticfile.org/twitter-bootstrap/3.3.7/js/bootstrap.min.js"></script>
+        {% endblock %}
+    </head>
+
+    <body>
+    <main>
+        {% block head %}
+            <!-- <div class="container"> -->
+                <table width="100%">
+                    <tr>
+                        <td width="10%"bgcolor="#1B4F72" align="center">
+                            <a href="{{ url_for('ctb_admin') }}" target=''><img src="{{ url_for('static', filename='logo1.png')}}" width="60"></a>
+                        </td>
+                        <td width="80%" bgcolor="#1B4F72" align="left">
+                            <br>
+                            <span style="color: #f5f5f5; font-size: x-large"><strong>&nbsp;&nbsp;AutoCTB: Experimentation using full coverage supply </strong></span>
+                            <br><br>
+                        </td>
+                        <td width="10%" bgcolor="#1B4F72" align="left">
+                            <br>
+                            <span style="color: #f5f5f5; font-size: small">Welcome, {{ user }}</span>
+                            <br><br>
+                        </td>
+                    </tr>
+                </table>
+            <!-- </div> -->
+        <br>
+        {% endblock %}
+        <br>
+
+    {% block content %}
+    {% endblock %}
+
+    {% block flash_message %}
+        <!-- below for flashed messages -->
+        <table style="border-collapse:collapse" border="0" cellspacing="0px" align="center">
+            <tbody>
+                <tr>
+                  <td width="1200" align="left">
+                      <main class="container">
+                        {% if get_flashed_messages()|length>0 %}
+                          {% for message in get_flashed_messages(with_categories=True) %}
+                            <div class="alert alert-{{ message[0] }}" role="alert">
+                                <button type="button" class="close" data-dismiss="alert">&times;</button>
+                                {{ message[1] }}
+                            </div>
+                          {% endfor %}
+                        {% endif %}
+                      </main>
+                  </td>
+                </tr>
+            </tbody>
+        </table>
+    {% endblock %}
+</main>
+
+    <br><br><br>
+{% block footer %}
+            <p align="center" style="font-size: small">
+                2020-10   |
+                <a href="https://app.smartsheet.com/sheets/35WQQCXQCpG4WRgm95q5p6C4V8vwFWCRGFXcgCq1?view=grid" target="_blank">FOC/FDO Exception priority SS</a> |
+                <a href="https://app.smartsheet.com/sheets/Xwghh9cRQPF6qRv7qQxWpmcqpMV9rJ8gXGw8Qh81?view=grid" target="_blank">FOC/FDO Exception PO</a>
+        </p>
+
+{% endblock %}
+
+</body></html>

@@ -1,0 +1,173 @@
+
+<!-- Ken wang, Oct, 2020 -->
+
+{% extends 'ctb_base.html' %}
+
+{% block content %}
+    <!--<div class="card container"> -->
+    <table width="90%" align="center">
+        <tr>
+            <td>
+                <ul class="nav nav-tabs">
+                    <li style="font-size: large"><a href="{{ url_for('ctb_run')}}"><strong>CTB</strong></a></li>
+                    <li style="font-size: large"><a href="{{ url_for('ctb_download')}}"><strong>Download</strong></a></li>
+                    <li class="active" style="font-size: large"><a href="{{ url_for('ctb_admin')}}" style="font-size: large"><strong>Admin</strong></a></li>
+                </ul>
+            </td>
+        </tr>
+    </table>
+    <!-- </div> -->
+
+
+    <form method="post" enctype="multipart/form-data">
+        {{ form.csrf_token }}
+         <!-- below for flashed messages -->
+        <table style="border-collapse:collapse" border="0" cellspacing="0px" width="88%" align="center">
+                <tr>
+                  <td align="left" width="95%">
+                        {% if get_flashed_messages()|length>0 %}
+                          {% for message in get_flashed_messages(with_categories=True) %}
+                            <div class="alert alert-{{ message[0] }}" role="alert">
+                                <button type="button" class="close" data-dismiss="alert">&times;</button>
+                                {{ message[1] }}
+                            </div>
+                          {% endfor %}
+                        {% endif %}
+                  </td>
+                </tr>
+
+                <tr>
+                    <td>
+                        <br><br>
+                        <p><strong> Delete files:</strong></p>
+                                <table width="840" border="0" cellspacing="1px" align="left" style="border-color: #c5c5c5;">
+                                    <tr>
+                                        <td align="left" width="90%">
+                                            {{ form.file_name_delete (class='form-control')}}
+                                        </td>
+                                        <td align="center" width="10%">
+                                            {{ form.submit_delete (class='btn-primary btn-sm')}}
+                                        </td>
+                                    </tr>
+                                </table>
+                    </td>
+                </tr>
+
+                <tr>  <!-- For downloading the allocation resut files -->
+                    <td width="95%">
+                        <br><br><br>
+                            {% if files_output|length>0 %}
+                                <p><strong> CTB files generated:</strong></p>
+                                <table border="1" cellspacing="1px" align="left" style="border-color: #c5c5c5;">
+                                    <tbody>
+                                        <tr>
+                                            <td width="400"><span style="font-size: large;">&nbsp;&nbsp;File name</span></td>
+                                            <td width="200"><span style="font-size: large">&nbsp;&nbsp;Creation time</span></td>
+                                            <td width="120"><span style="font-size: large">&nbsp;&nbsp;File size</span></td>
+                                            <td width="120">&nbsp;&nbsp;File download</td>
+                                        </tr>
+                                        {% for row in files_output %}
+                                            <tr>
+                                                {% for col in row[:3] %}
+                                                    <td><span style="font-size: small">&nbsp;&nbsp;&nbsp;{{col}}</span></td>
+                                                {% endfor %}
+                                                <td align="center">
+                                                    <a href="{{ url_for('download_file_output',filename=row[0]) }}">download</a>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            {% endif %}
+                    </td>
+                </tr>
+
+
+                <tr> <!-- For downloading uploaded input data files -->
+                    <td width="95%">
+                        <br><br><br>
+                                {% if files_uploaded|length>0 %}
+                                    <p><strong> Input files uploaded by user:</strong></p>
+                                    <table style="border-collapse:collapse" border="1" cellspacing="0px" align="left">
+                                        <tr>
+                                            <td width="400"><span style="font-size: large;">&nbsp;&nbsp;File name</span></td>
+                                            <td width="200"><span style="font-size: large">&nbsp;&nbsp;Creation time</span></td>
+                                            <td width="120"><span style="font-size: large">&nbsp;&nbsp;File size</span></td>
+                                            <td width="120">&nbsp;&nbsp;File download</td>
+                                        </tr>
+                                        {% for row in files_uploaded %}
+                                            <tr>
+                                                {% for col in row[:3] %}
+                                                    <td><span style="font-size: small">&nbsp;&nbsp;&nbsp;{{col}}</span></td>
+                                                {% endfor %}
+                                                <td align="center">
+                                                    <a href="{{ url_for('download_file_upload',filename=row[0]) }}">download</a>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </table>
+                                {% endif %}
+                    </td>
+                </tr>
+
+                <tr> <!-- For downloading log data files -->
+                    <td width="95%">
+                        <br><br><br>
+                                {% if files_log|length>0 %}
+                                    <p><strong> Log files:</strong></p>
+                                    <table style="border-collapse:collapse" border="1" cellspacing="0px" align="left">
+                                        <tr>
+                                            <td width="400"><span style="font-size: large;">&nbsp;&nbsp;File name</span></td>
+                                            <td width="200"><span style="font-size: large">&nbsp;&nbsp;Creation time</span></td>
+                                            <td width="120"><span style="font-size: large">&nbsp;&nbsp;File size</span></td>
+                                            <td width="120">&nbsp;&nbsp;File download</td>
+                                        </tr>
+                                        {% for row in files_log %}
+                                            <tr>
+                                                {% for col in row[:3] %}
+                                                    <td><span style="font-size: small">&nbsp;&nbsp;&nbsp;{{col}}</span></td>
+                                                {% endfor %}
+                                                <td align="center">
+                                                    <a href="{{ url_for('download_file_logs',filename=row[0]) }}">download</a>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </table>
+                                {% endif %}
+                    </td>
+                </tr>
+
+                <tr> <!-- For viewing the log details -->
+                    <td width="95%">
+                        <br><br><br>
+                                {% if log_details|length>0 %}
+                                    <p><strong> Log details:</strong></p>
+                                    <table style="border-collapse:collapse; word-break:break-all; word-wrap: break-word " border="1" cellspacing="0px" align="left">
+                                        <tr>
+                                            <td width="60"><span style="font-size: large;">&nbsp;&nbsp;id</span></td>
+                                            <td width="100"><span style="font-size: large;">&nbsp;&nbsp;User id</span></td>
+                                            <td width="100"><span style="font-size: large">&nbsp;&nbsp;Date</span></td>
+                                            <td width="100"><span style="font-size: large">&nbsp;&nbsp;Time</span></td>
+                                            <td width="100"><span style="font-size: large">&nbsp;&nbsp;Location</span></td>
+                                            <td width="120"><span style="font-size: large">&nbsp;&nbsp;User action</span></td>
+                                            <td width="600"><span style="font-size: large">&nbsp;&nbsp;Summary</span></td>
+                                        </tr>
+                                        {% for row in log_details %}
+                                            <tr>
+                                                {% for col in row %}
+                                                    <td><span style="font-size: small">&nbsp;&nbsp;&nbsp;{{col}}</span></td>
+                                                {% endfor %}
+                                            </tr>
+                                        {% endfor %}
+                                    </table>
+                                {% endif %}
+                    </td>
+                </tr>
+        </table>
+
+    </form>
+
+{% endblock %}
+
+{% block flash_message %}
+{% endblock %}
