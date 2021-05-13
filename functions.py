@@ -9,9 +9,37 @@ import traceback
 from smartsheet_handler import SmartSheetClient
 from sending_email import *
 import time
+from functools import wraps
 
 plt.rcParams.update({'figure.max_open_warning': 0})
 
+
+def add_log_details(msg=''):
+    with open(os.path.join(base_dir_logs, 'log_details.txt'), 'a+') as file_object:
+        file_object.write(msg)
+
+def write_log_time_spent(f):
+    """
+    A decorator to write function time spent logs
+    """
+    @wraps(f)
+    def wrapTheFunction(*args, **kwargs):
+        start=time.time()
+        result = f(*args, **kwargs)
+        end=time.time()
+        time_spent_second=round(end-start,1)
+        func_name = f.__name__
+        msg='\n' + str(time_spent_second) + ' sec: ' + func_name
+        print(msg)
+
+        with open(os.path.join(base_dir_logs, 'log_details.txt'), 'a+') as file_object:
+            file_object.write(msg)
+
+        return result
+
+    return wrapTheFunction
+
+@write_log_time_spent
 def pick_out_zero_qty_order(df_3a4):
     """
     Pick out the error orders with 0 ordered qty
@@ -25,6 +53,7 @@ def pick_out_zero_qty_order(df_3a4):
     return df_3a4,df_3a4_zero_qty
 
 # define func for creating supply dic by tan&date
+@write_log_time_spent
 def created_supply_dict_per_df_supply(df_supply):
     """
     create supply dict based on df_supply
@@ -51,6 +80,7 @@ def created_supply_dict_per_df_supply(df_supply):
 
 
 # 根据tan list和df_3a4生成blg_dic_tan
+@write_log_time_spent
 def create_blg_dict_per_sorted_3a4_and_selected_tan(df_3a4, supply_dic_tan):
     """
     create backlog dict for selected tan list from the sorted 3a4 df which have packed PO excluded (considered order prioity and
@@ -73,7 +103,7 @@ def create_blg_dict_per_sorted_3a4_and_selected_tan(df_3a4, supply_dic_tan):
         #print(blg_dic_tan)
     return blg_dic_tan
 
-
+@write_log_time_spent
 def allocate_supply_to_backlog_and_calculate_shortage(supply_dic_tan, blg_dic_tan):
     """
     allocate supply to each PO by TAN based on supply dict and backlog dict
@@ -169,6 +199,7 @@ def allocate_supply_to_backlog_and_calculate_shortage(supply_dic_tan, blg_dic_ta
 
     return blg_with_allocation
 
+@write_log_time_spent
 def identify_top_gating_pn(df_3a4):
     """
     Identify the top gating items for missing lt_target_fcd or fcd.
@@ -193,6 +224,7 @@ def identify_top_gating_pn(df_3a4):
 
 
 # calculate the PO supply ready date
+@write_log_time_spent
 def calculate_po_supply_ready_date_and_add_to_3a4(df_3a4, pn_to_consider):
     dfx = df_3a4[df_3a4.BOM_PN.isin(pn_to_consider)].copy()
 
@@ -217,7 +249,7 @@ def calculate_po_supply_ready_date_and_add_to_3a4(df_3a4, pn_to_consider):
 
     return df_3a4
 
-
+@write_log_time_spent
 def calculate_po_ctb_in_3a4(df_3a4):
     """
     Add 2 days FLT to get PO CTB based on PO supply available date;  PO without
@@ -257,7 +289,7 @@ def calculate_po_ctb_in_3a4(df_3a4):
 
     return df_3a4
 
-
+@write_log_time_spent
 def calculate_ss_ctb_and_add_to_3a4(df_3a4):
     """
     Calculate SS CTB based on PO CTB date - the latest one----- having bug to be fixed!!!!!!
@@ -286,6 +318,7 @@ def calculate_ss_ctb_and_add_to_3a4(df_3a4):
 
     return df_3a4
 
+@write_log_time_spent
 def calculate_riso_status(df_3a4):
     """
     Identify current RISo status and to be RISO status based on SS_CTB
@@ -307,6 +340,7 @@ def calculate_riso_status(df_3a4):
 
     return df_3a4
 
+@write_log_time_spent
 def write_excel_file(fname, data_to_write):
     '''
     Write the df into excel files as different sheets
@@ -322,29 +356,52 @@ def write_excel_file(fname, data_to_write):
 
     writer.save()
 
-def read_3a4_and_limit_org_bu(file_path_3a4, bu_list, org_list):
+@write_log_time_spent
+def read_3a4_and_check_format(file_path_3a4,required_3a4_col):
     """
-    Read 3a4 data and limit to selected org and bu;
+    Read the 3a4 and check to ensure the needed columns are included
     """
-    # formally read 3a4
     df_3a4 = pd.read_csv(file_path_3a4, encoding='iso-8859-1',
-                             # parse_dates=['CURRENT_FCD_NBD_DATE', 'ORIGINAL_FCD_NBD_DATE', 'LT_TARGET_FCD'],
-                             low_memory=False)
-    """
-    # 重新根据org存储文件
-    orgs = df_3a4.ORGANIZATION_CODE.unique()
-    fname = file_path_3a4[:-4] + ' (' + '_'.join(orgs) + ').csv'
-    df_3a4.to_csv(fname,index=False)
-    """
+                         # parse_dates=['CURRENT_FCD_NBD_DATE', 'ORIGINAL_FCD_NBD_DATE', 'LT_TARGET_FCD'],
+                         low_memory=False)
 
-    # Limit 3a4 to selected BU and Org
-    if bu_list==['']:
-        bu_list=df_3a4.BUSINESS_UNIT.unique()
+    col_3a4=df_3a4.columns
+    missing_3a4_col=np.setdiff1d(required_3a4_col,col_3a4)
 
-    df_3a4 = df_3a4[(df_3a4.BUSINESS_UNIT.isin(bu_list)) & (df_3a4.ORGANIZATION_CODE.isin(org_list))].copy()
+    if len(missing_3a4_col)>0:
+        error_msg='Error! 3a4 are missing following colums: {}. Pls ensure to use 3a4 view kw_CTB to download 3a4.'
+    else:
+        error_msg=''
+
+    return df_3a4,error_msg
+
+@write_log_time_spent
+def read_kinaxis_supply_and_check_format(file_path_kinaxis_supply, required_kinaxis_supply_col):
+    """
+    Read the Kinaxis supply and check to ensure the needed columns are included
+    """
+    df_supply_kinaxis=pd.read_excel(file_path_kinaxis_supply,header=1)
+    col_supply=df_supply_kinaxis.columns
+    supply_format_correct=np.all(np.in1d(required_kinaxis_supply_col,col_supply))
+
+    if supply_format_correct==False:
+        error_msg='Kinaxis supply file format error! Pls ensure the header in row 2 and include following required columns: {}'.format(required_kinaxis_supply_col)
+    else:
+        error_msg=''
+
+    return df_supply_kinaxis, error_msg
+
+
+def limit_3a4_org_and_bu(df_3a4,org_list,bu_list):
+    """
+    Limit 3a4 to defined org and bu
+    """
+    df_3a4 = df_3a4[df_3a4.ORGANIZATION_CODE.isin(org_list)].copy()
+
+    if bu_list!=['']:
+        df_3a4 = df_3a4[df_3a4.BUSINESS_UNIT.isin(bu_list)].copy()
 
     return df_3a4
-
 
 def read_data_cm(fname_supply,fname_ct2r):
     """
@@ -393,41 +450,7 @@ def get_file_info_on_drive(base_path,keep_hours=100):
     return df_file_info
 
 
-def read_kinaxis_supply_and_initial_process(fname_supply_kinaxis):
-    """
-    从kinaxis文件中读取supply数据，去除不要的列; 并按Org存储新文件
-    :param fname_supply_kinaxis:
-    :return:
-    """
-    df_kinaxis=pd.read_excel(fname_supply_kinaxis,header=1)
-
-    """
-    # 重新根据org存储文件
-    orgs = df_kinaxis.ORG.unique()
-    fname = fname_supply_kinaxis[:-5] + ' (' + '_'.join(orgs) + ').xlsx'
-    df_kinaxis.to_excel(fname, index=False)
-    """
-
-    #判断位置并取出需要的信息
-    col=df_kinaxis.columns
-    ind = col.tolist().index('Past') - 1
-    df_supply=df_kinaxis[df_kinaxis[col[ind]]=='Total Supply'].copy()
-    df_supply.set_index(['TAN'], inplace=True)
-    df_supply = df_supply.iloc[:, ind:]
-    #Past改为本周前一天的日期；列名改为日期格式
-    current_wk_start=col[ind+2]
-    oh_date=pd.to_datetime(current_wk_start)-pd.Timedelta(1,'d')
-    df_supply.rename(columns={'Past':oh_date},inplace=True)
-    df_supply.columns=[x.date() for x in pd.to_datetime(df_supply.columns)]
-    #处理更正数据格式
-    df_supply = df_supply.applymap(lambda x: str(x).replace(',', ''))
-    df_supply = df_supply.applymap(lambda x: str(x).replace('nan', '0'))
-    df_supply = df_supply.applymap(float)
-    df_supply = df_supply.applymap(int)
-
-    return df_supply
-
-
+@write_log_time_spent
 def basic_data_processing_3a4(df_3a4):
     """
     Do some basic 3a4 processing
@@ -458,6 +481,7 @@ def basic_data_processing_3a4(df_3a4):
 
     return df_3a4
 
+@write_log_time_spent
 def exclude_unneeded_and_missing_ct2r(df_supply_df,df_ct2r):
     """
     Exclude the unneeded CT2R data and also identify the missing CT2R PN for the DF materials. Do this with the versionless PN.
@@ -475,6 +499,7 @@ def exclude_unneeded_and_missing_ct2r(df_supply_df,df_ct2r):
 
     return df_ct2r,df_missing_ct2r
 
+@write_log_time_spent
 def add_allocation_result_to_3a4(df_3a4,blg_with_allocation):
     """
     将分配结果加入到3a4中
@@ -499,7 +524,7 @@ def add_allocation_result_to_3a4(df_3a4,blg_with_allocation):
 
     return df_3a4
 
-
+@write_log_time_spent
 def calculate_earliest_packable_date(df_3a4):
     """
     Calculate an earliest allowed packout date based on if order is scheduled, and LT_target_FCD,target_SSD. This logic
@@ -533,6 +558,7 @@ def calculate_earliest_packable_date(df_3a4):
 
     return df_3a4
 
+@write_log_time_spent
 def redefine_addressable_flag_main_pip_version(df_3a4):
     '''
     Updated on Oct 27, 2020 to leveraging existing addressable definition of Y, and redefine the NO to MFG_HOLD,
@@ -578,7 +604,7 @@ def redefine_addressable_flag_main_pip_version(df_3a4):
     return df_3a4
 
 
-
+@write_log_time_spent
 def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocation,FLT,cut_off='wk0'):
     """
     Calculate and add extra col to indicate build impact by the cutoff week (wk0 as current week). The backlog base is
@@ -757,7 +783,7 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
     return df_3a4,df_build_impact_summary,output_col
 
 
-
+@write_log_time_spent
 def update_ss_status(df_3a4):
     #print(df_3a4.ss_ctb.unique())
     df_3a4.loc[:, 'ss_updated_status'] = np.where(df_3a4.CURRENT_FCD_NBD_DATE.notnull(),
@@ -771,6 +797,7 @@ def update_ss_status(df_3a4):
 
     return df_3a4
 
+@write_log_time_spent
 def write_data_to_spreadsheet(base_dir_output,output_filename,data_to_write):
     """
     Write the data to spreadsheet in multiple sheets.
@@ -1027,7 +1054,7 @@ def ss_ranking_overall_new(df_3a4,ss_exceptional_priority, ranking_col, order_co
 
     return df_3a4
 
-
+@write_log_time_spent
 def ss_ranking_overall_new_december(df_3a4, ss_exceptional_priority, ranking_col, order_col='SO_SS', new_col='ss_overall_rank'):
     """
     根据priority_cat,OSSD,FCD, REVENUE_NON_REVENUE,C_UNSTAGED_QTY,按照ranking_col的顺序对SS进行排序。最后放MFG_HOLD订单.
@@ -1141,6 +1168,7 @@ def ss_ranking_overall_new_december(df_3a4, ss_exceptional_priority, ranking_col
 
     return df_3a4
 
+@write_log_time_spent
 def df_pn_ct2r_date_judgement(df_ct2r, df_supply_df):
     """
     根据df_ct2r和df_supply_df判断假定df supply OK的日期
@@ -1177,6 +1205,7 @@ def df_pn_ct2r_date_judgement(df_ct2r, df_supply_df):
 
 
 # 修改df_supply_df：对应日期赋值100000
+@write_log_time_spent
 def update_supply_for_df_w_ct2r(df_supply_df, pn_ct2r_lastsupply_max):
     for pn, date in pn_ct2r_lastsupply_max.items():
         df_supply_df.loc[pn, date] = 100000
@@ -1187,7 +1216,7 @@ def update_supply_for_df_w_ct2r(df_supply_df, pn_ct2r_lastsupply_max):
 
     return df_supply_df
 
-
+@write_log_time_spent
 def update_order_bom_to_3a4(df_3a4, df_order_bom,df_supply):
     """
     Add PN into 3a4 based on BOM; and remove the rows based on df_supply PN.
@@ -1222,7 +1251,6 @@ def update_order_bom_to_3a4(df_3a4, df_order_bom,df_supply):
 
 
     return df_3a4
-
 
 
 def resample_columns_and_agg_pastdue(df,method='W-SAT',agg_col_name='Current week',total_col=None,total_row=None,convert_num=False):
@@ -1284,6 +1312,7 @@ def resample_columns_and_agg_pastdue(df,method='W-SAT',agg_col_name='Current wee
 
     return df
 
+@write_log_time_spent
 def make_summary_build_projection(df_3a4,bu_list):
     """
     Create summary to indicate the build projection (against PO CTB date); also add in addressable backlog.
@@ -1365,6 +1394,7 @@ def make_summary_build_projection(df_3a4,bu_list):
 
     return df_build_projection
 
+@write_log_time_spent
 def make_summary_decommit_vs_improve(df_3a4):
     """
     Create summary to indicate the order pull in or decommit status against current FCD based on SO_SS
@@ -1380,7 +1410,7 @@ def make_summary_decommit_vs_improve(df_3a4):
     return df_order_status
 
 
-
+@write_log_time_spent
 def make_summary_riso(df_3a4):
     """
     Create summary to indicate current RISO and to be RISO status based on SS_CTB. This is LT RISO against LT_TARGET_FCD
@@ -1412,55 +1442,7 @@ def make_summary_riso(df_3a4):
     return df_riso
 
 
-
-def change_supply_to_versionless_and_addup_supply(df_supply,pn_col='TAN'):
-    """
-    Change PN in supply  into versionless. Add up the qty into the versionless PN.
-    :param df_supply:
-    :param pn_col: name of the PN col. In Cm supply file it's PN, in Kinaxis file it's TAN.
-    :return:
-    """
-    regex = re.compile(r'\d{2,3}-\d{4,7}')
-    """
-    df_supply.to_excel('df_supply.xlsx')
-    for row in df_supply.itertuples(index=True):
-        try:
-            regex.search(row.Index).group()
-        except:
-            print(row.Index)
-    """
-
-    # convert to versionless
-    try:
-        df_supply.index = df_supply.index.map(lambda x: regex.search(x).group())
-    except:
-        print("Some TAN can't be regex'ed, considered as format error!")
-        # write details to error_log.txt
-        log_msg = '\n\nError regex supply file TAN! ' + pd.Timestamp.now().strftime('%Y-%m-%d %H:%M') + '\n'
-        with open(os.path.join(base_dir_logs, 'error_log.txt'), 'a+') as file_object:
-            file_object.write(log_msg)
-        traceback.print_exc(file=open(os.path.join(base_dir_logs, 'error_log.txt'), 'a+'))
-        raise ValueError('Error regex the TAN in supply data.Stops!')
-
-    # add up the duplicate PN (due to multiple versions)
-    df_supply.sort_index(inplace=True)
-    df_supply.reset_index(inplace=True)
-    dup_pn = df_supply[df_supply.duplicated(pn_col)][pn_col].unique()
-    df_sum = pd.DataFrame(columns=df_supply.columns)
-
-    df_sum.set_index(pn_col, inplace=True)
-    df_supply.set_index(pn_col, inplace=True)
-
-    for pn in dup_pn:
-        # print(df_supply[df_supply.PN==pn].sum(axis=1).sum())
-        df_sum.loc[pn, :] = df_supply.loc[pn, :].sum(axis=0)
-
-    df_supply.drop(dup_pn, axis=0, inplace=True)
-    df_supply = pd.concat([df_supply, df_sum])
-
-    return df_supply
-
-
+@write_log_time_spent
 def change_ct2r_to_versionless(df_ct2r):
     """
     Change PN in CT2R into versionless.
@@ -1474,7 +1456,7 @@ def change_ct2r_to_versionless(df_ct2r):
 
     return df_ct2r
 
-
+@write_log_time_spent
 def exclude_short_ct2r_from_df_supply_and_df_ct2r(df_supply_df,df_ct2r,ct2r_threshold=5):
     """
     Exclude the short CT2R PN from the DF supply so they won't be considered. Do this with the versionless data.
@@ -1494,6 +1476,7 @@ def exclude_short_ct2r_from_df_supply_and_df_ct2r(df_supply_df,df_ct2r,ct2r_thre
 
     return df_supply_df,df_ct2r, df_short_ct2r
 
+@write_log_time_spent
 def apply_transit_time_to_pcba_supply(df_supply_pcba,df_org,transit_time):
     """
     Apply transit time to PCBA supply: change from SCR commit to ETA.
@@ -1508,6 +1491,7 @@ def apply_transit_time_to_pcba_supply(df_supply_pcba,df_org,transit_time):
 
     return df_supply_pcba
 
+@write_log_time_spent
 def remove_pcba_wrongly_included_in_df_supply(df_supply_pcba,df_supply_df):
     """
     Extra and temporary step for correction data: if PCBA are wrongly included in DF supply, they get removed.
@@ -1524,6 +1508,7 @@ def remove_pcba_wrongly_included_in_df_supply(df_supply_pcba,df_supply_df):
     return df_supply_df
 
 
+@write_log_time_spent
 def make_shortage_summary(df_3a4, col,type='revenue'):
     """
     Make summary to indicate the shortage material qty/impact$ against specified col (current FCD, LT target FCD, etc)
@@ -1568,7 +1553,7 @@ def make_shortage_summary(df_3a4, col,type='revenue'):
 
     return df_shortage_summary
 
-
+@write_log_time_spent
 def make_summary_shortage_material_qty(df_3a4, col):
     """
     Make summary to indicate the shortage qty against specified col (current FCD, LT target FCD, etc)
@@ -1605,6 +1590,7 @@ def make_summary_shortage_material_qty(df_3a4, col):
     return df_shortage_qty
 
 
+@write_log_time_spent
 def make_sd_summary(df_3a4,df_supply,supply_source,date_col='min_date'):
     """
     Make supply/demand type of summary against LT target FCD or other specified date
@@ -1738,6 +1724,7 @@ def make_sd_summary(df_3a4,df_supply,supply_source,date_col='min_date'):
 
     return df_sd_combined
 
+@write_log_time_spent
 def generate_df_order_bom_from_flb_tan_col(df_3a4):
     """
     Generate the BOM usage file from the FLB_TAN col
@@ -1772,37 +1759,7 @@ def generate_df_order_bom_from_flb_tan_col(df_3a4):
 
     return df_order_bom_from_flb
 
-
-def exclude_pn_no_need_to_consider_from_kinaxis_supply(df_supply,class_code_exclusion):
-    """
-    Exlude supply based on class code exclusion setting.
-    :param df_supply:
-    :param class_code_exclusion:
-    :return:
-    """
-    df_supply.reset_index(inplace=True)
-
-    # Exclue PID - TAN的前10个字符中包含以上任意字母 (部分TAN后面带字母)
-    letter_list=[x for x in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ']
-    df_supply.loc[:,'temp']=df_supply.TAN.map(lambda x: 'yes' if any(letter in x[:10] for letter in letter_list) else 'no')
-
-    df_supply.loc[:,'temp']=np.where(~df_supply.TAN.str.contains('-'),
-                                     'yes',df_supply.temp)
-
-    df_supply=df_supply[df_supply.temp=='no'].copy()
-
-    #df_supply.to_excel('test.xlsx')
-    df_supply.drop('temp', axis=1, inplace=True)
-
-    # Exclude by class_code_exclusion
-    pn_supply = df_supply.TAN.values
-    pn_to_consider=[pn for pn in pn_supply if pn[:3] not in class_code_exclusion and pn[:4] not in class_code_exclusion]
-
-    df_supply=df_supply[df_supply.TAN.isin(pn_to_consider)].copy()
-    df_supply.set_index(['TAN'],inplace=True)
-
-    return df_supply
-
+@write_log_time_spent
 def get_packed_or_cancelled_ss_from_3a4(df_3a4):
     """
     Get the fully packed or canceleld SS from 3a4 - for deleting exceptional priority smartsheet purpose.
@@ -1819,6 +1776,7 @@ def get_packed_or_cancelled_ss_from_3a4(df_3a4):
 
     return ss_cancelled_or_packed_3a4
 
+@write_log_time_spent
 def read_and_add_exception_po_to_3a4(df_3a4):
     """
     Read Exceptional PO (GIMS, Config, etc) from smartsheet and add to 3a4
@@ -1842,7 +1800,7 @@ def read_and_add_exception_po_to_3a4(df_3a4):
 
     return df_3a4
 
-
+@write_log_time_spent
 def read_backlog_priority_from_smartsheet(df_3a4,login_user):
     '''
     Read backlog priorities from smartsheet; remove SS showing packed/cancelled, or created by self but disappear from 34(if the org/BU also exist in 3a4.);
@@ -1888,6 +1846,7 @@ def read_backlog_priority_from_smartsheet(df_3a4,login_user):
 
     return ss_exceptional_priority
 
+@write_log_time_spent
 def remove_priority_ss_from_smtsheet_and_notify(df_removal,login_user,sender='APJC DFPM'):
     """
     Remove the packed/cancelled SS from priority smartsheet and send email to corresponding people for whose SS are removed from the priority smartsheet
@@ -1915,7 +1874,7 @@ def remove_priority_ss_from_smtsheet_and_notify(df_removal,login_user,sender='AP
                                          removal_ss_details=df_removal.values,
                                          user=login_user)
 
-
+@write_log_time_spent
 def make_summary_fcd_vs_ctb(df_3a4):
     """
     Make summary by PF to indicate the difference between current FCD and PO_CTB date.
@@ -2139,6 +2098,8 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
 
     return output_filename
 
+
+@write_log_time_spent
 def decide_qend_date(qend_list):
     """
     Decide which date is curent qend date based on predefined qend_list.
@@ -2155,64 +2116,123 @@ def decide_qend_date(qend_list):
 
     return qend
 
-
-def remove_blank_rows_in_supply(df_supply):
+@write_log_time_spent
+def initial_process_kinaxis_supply(df_supply_kinaxis):
     """
-    Some supply have double rows - Looks caused by RTF Flag (Y/N), one row may be blank. Use total ==0 to judge and remove.
+    从kinaxis文件中读取supply数据，去除不要的列; 并按Org存储新文件
+    """
+    #判断位置并取出需要的信息
+    col=df_supply_kinaxis.columns
+    ind = col.tolist().index('Past') - 1
+    df_supply_kinaxis=df_supply_kinaxis[df_supply_kinaxis[col[ind]]=='Total Supply'].copy()
+    df_supply_kinaxis.set_index(['TAN'], inplace=True)
+    df_supply_kinaxis = df_supply_kinaxis.iloc[:, ind:]
+    #Past改为本周前一天的日期；列名改为日期格式
+    current_wk_start=col[ind+2]
+    oh_date=pd.to_datetime(current_wk_start)-pd.Timedelta(1,'d')
+    df_supply_kinaxis.rename(columns={'Past':oh_date},inplace=True)
+    df_supply_kinaxis.columns=[x.date() for x in pd.to_datetime(df_supply_kinaxis.columns)]
+    #处理更正数据格式
+    df_supply_kinaxis = df_supply_kinaxis.applymap(lambda x: str(x).replace(',', ''))
+    df_supply_kinaxis = df_supply_kinaxis.applymap(lambda x: str(x).replace('nan', '0'))
+    df_supply_kinaxis = df_supply_kinaxis.applymap(float)
+    df_supply_kinaxis = df_supply_kinaxis.applymap(int)
+
+    # 去除空行
+    df_supply_kinaxis.loc[:, 'Total'] = df_supply_kinaxis.sum(axis=1)
+    df_supply_kinaxis = df_supply_kinaxis[df_supply_kinaxis.Total > 0].copy()
+    df_supply_kinaxis.drop('Total', axis=1, inplace=True)
+
+    return df_supply_kinaxis
+
+@write_log_time_spent
+def exclude_pn_no_need_to_consider_from_kinaxis_supply(df_supply_kinaxis,class_code_exclusion):
+    """
+    Exlude supply based on class code exclusion setting.
+    """
+    df_supply_kinaxis.reset_index(inplace=True)
+
+    # Exclue PID - TAN的前10个字符中包含以上任意字母 (部分TAN后面带字母)
+    letter_list=[x for x in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ']
+    df_supply_kinaxis.loc[:,'temp']=df_supply_kinaxis.TAN.map(lambda x: 'yes' if any(letter in x[:10] for letter in letter_list) else 'no')
+
+    df_supply_kinaxis.loc[:,'temp']=np.where(~df_supply_kinaxis.TAN.str.contains('-'),
+                                     'yes',df_supply_kinaxis.temp)
+
+    df_supply_kinaxis=df_supply_kinaxis[df_supply_kinaxis.temp=='no'].copy()
+
+    #df_supply.to_excel('test.xlsx')
+    df_supply_kinaxis.drop('temp', axis=1, inplace=True)
+
+    # Exclude by class_code_exclusion
+    tan_kinaxis = df_supply_kinaxis.TAN.values
+    pn_to_consider=[pn for pn in tan_kinaxis if pn[:3] not in class_code_exclusion and pn[:4] not in class_code_exclusion]
+
+    df_supply_kinaxis=df_supply_kinaxis[df_supply_kinaxis.TAN.isin(pn_to_consider)].copy()
+    df_supply_kinaxis.set_index(['TAN'],inplace=True)
+
+    return df_supply_kinaxis
+
+
+@write_log_time_spent
+def change_supply_to_versionless_and_addup_kinaxis_supply(df_supply_kinaxis,pn_col='TAN'):
+    """
+    Change PN in supply  into versionless. Add up the qty into the versionless PN.
     :param df_supply:
+    :param pn_col: name of the PN col. In Cm supply file it's PN, in Kinaxis file it's TAN.
     :return:
     """
-    df_supply.loc[:,'Total']=df_supply.sum(axis=1)
-    df_supply=df_supply[df_supply.Total>0].copy()
-    df_supply.drop('Total',axis=1,inplace=True)
+    regex = re.compile(r'\d{2,3}-\d{4,7}')
+    """
+    df_supply.to_excel('df_supply.xlsx')
+    for row in df_supply.itertuples(index=True):
+        try:
+            regex.search(row.Index).group()
+        except:
+            print(row.Index)
+    """
 
-    return df_supply
+    # convert to versionless
+    try:
+        df_supply_kinaxis.index = df_supply_kinaxis.index.map(lambda x: regex.search(x).group())
+    except:
+        print("Some TAN can't be regex'ed, considered as format error!")
+        # write details to error_log.txt
+        log_msg = '\n\nError regex supply file TAN! ' + pd.Timestamp.now().strftime('%Y-%m-%d %H:%M') + '\n'
+        with open(os.path.join(base_dir_logs, 'error_log.txt'), 'a+') as file_object:
+            file_object.write(log_msg)
+        traceback.print_exc(file=open(os.path.join(base_dir_logs, 'error_log.txt'), 'a+'))
+        raise ValueError('Error regex the TAN in supply data.Stops!')
 
-def read_supply_and_process(fname_supply,class_code_exclusion):
+    # add up the duplicate PN (due to multiple versions)
+    df_supply_kinaxis.sort_index(inplace=True)
+    df_supply_kinaxis.reset_index(inplace=True)
+    dup_pn = df_supply_kinaxis[df_supply_kinaxis.duplicated(pn_col)][pn_col].unique()
+    df_sum = pd.DataFrame(columns=df_supply_kinaxis.columns)
+
+    df_sum.set_index(pn_col, inplace=True)
+    df_supply_kinaxis.set_index(pn_col, inplace=True)
+
+    for pn in dup_pn:
+        # print(df_supply[df_supply.PN==pn].sum(axis=1).sum())
+        df_sum.loc[pn, :] = df_supply_kinaxis.loc[pn, :].sum(axis=0)
+
+    df_supply_kinaxis.drop(dup_pn, axis=0, inplace=True)
+    df_supply_kinaxis = pd.concat([df_supply_kinaxis, df_sum])
+
+    return df_supply_kinaxis
+
+#@write_log_time_spent
+def process_kinaxis_supply(df_supply_kinaxis,class_code_exclusion):
     """
     Read supply data, CT2R (for CM collected data), and exceptional backlog (input input), and processed into the
     final format after exclude the packaging and label class codes. Also save the Kinaxis file with org in filename.
     """
-    df_supply=read_kinaxis_supply_and_initial_process(fname_supply)
-    df_supply=remove_blank_rows_in_supply(df_supply)
-    df_supply=exclude_pn_no_need_to_consider_from_kinaxis_supply(df_supply, class_code_exclusion)
-    df_supply=change_supply_to_versionless_and_addup_supply(df_supply,pn_col='TAN')
+    df_supply_kinaxis=initial_process_kinaxis_supply(df_supply_kinaxis)
+    df_supply_kinaxis=exclude_pn_no_need_to_consider_from_kinaxis_supply(df_supply_kinaxis, class_code_exclusion)
+    df_supply_kinaxis=change_supply_to_versionless_and_addup_kinaxis_supply(df_supply_kinaxis,pn_col='TAN')
 
-    return df_supply
-
-
-def check_input_file_format(fname_supply,fname_3a4):
-    """
-    Check the format of Kinaxis supply and 3a4, return the missing col names.
-    :param supply_source:
-    :param fname_supply:
-    :param fname_3a4:
-    :return:
-    """
-    df_3a4_heading=pd.read_csv(fname_3a4,nrows=2)
-    col_3a4=df_3a4_heading.columns
-    required_3a4_col=['SO_SS', 'PO_NUMBER', 'ORGANIZATION_CODE', 'BUSINESS_UNIT',
-       'PRODUCT_FAMILY', 'PRODUCT_ID', 'TAN', 'MFG_HOLD', 'SECONDARY_PRIORITY',
-       'GLOBAL_RANK', 'BUP_RANK', 'FINAL_ACTION_SUMMARY', 'ORDER_HOLDS',
-       'ORDERED_QUANTITY', 'PACKOUT_QUANTITY', 'C_STAGED_QTY',
-       'C_UNSTAGED_QTY', 'BUILD_COMPLETE_DATE', 'ORDERED_DATE', 'BOOKED_DATE',
-       'LINE_CREATION_DATE', 'LT_TARGET_FCD', 'TARGET_SSD',
-       'CURRENT_FCD_NBD_DATE', 'ORIGINAL_FCD_NBD_DATE',
-       'CUSTOMER_REQUEST_DATE', 'CUSTOMER_REQUESTED_SHIP_DATE',
-       'C_UNSTAGED_DOLLARS', 'SOL_REVENUE', 'C_STAGED_DOLLARS',
-       'REVENUE_NON_REVENUE', 'DPAS_RATING', 'FALLOUT_CASE_DETAILS',
-       'FALLOUT_MANAGEMENT', 'FLB_TAN', 'CTB_STATUS',
-       'CURRENT_QUARTER_REVENUE_ELIGIBILITY', 'END_CUSTOMER_NAME',
-       'SHIP_TO_CUSTOMER_NAME', 'COMMENTS','PROGRAM']
-
-    missing_3a4_col=np.setdiff1d(required_3a4_col,col_3a4)
-
-    required_supply_col=['TAN','ORG','Make/Buy','Past']
-    df_supply_heading=pd.read_excel(fname_supply,nrows=2,header=1)
-    col_supply=df_supply_heading.columns
-    supply_format_correct=np.all(np.in1d(required_supply_col,col_supply))
-
-    return missing_3a4_col, supply_format_correct
+    return df_supply_kinaxis
 
 
 

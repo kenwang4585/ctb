@@ -4,7 +4,7 @@ import pandas as pd
 from flask_settings import *
 
 
-def add_user_log(user='', location='', user_action='',summary=''):
+def add_log_summary(user='', location='', user_action='',summary=''):
     '''
     Add the user log to db
     '''

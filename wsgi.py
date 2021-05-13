@@ -14,8 +14,8 @@ from flask import flash,send_from_directory,render_template,redirect,request,url
 from flask_settings import *
 from functions import *
 from setting import *
-from db_add import add_user_log
-from db_read import read_table
+from db_add import *
+from db_read import *
 #from db_delete import delete_record
 import traceback
 #from flask_bootstrap import Bootstrap
@@ -109,14 +109,16 @@ def ctb_run():
     if login_user not in allowed_user:
         raise ValueError
 
-    if login_user!='unknown' and login_user!='kwang2':
-        add_user_log(user=login_user, location='Run', user_action='Visit', summary='')
+    if login_user != 'kwang2':
+        add_log_summary(user=login_user, location='Home-RUN', user_action='Visit', summary='')
 
     if form.validate_on_submit():
+        log_msg_main = []
         start_time = pd.Timestamp.now()
         print('start to run: {}'.format(start_time.strftime('%Y-%m-%d %H:%M')))
-        log_msg = []
-        log_msg.append('\n\n[' + login_user + '] ' + start_time.strftime('%Y-%m-%d %H:%M'))
+
+        log_msg = '\n\n[' + login_user + '] ' + start_time.strftime('%Y-%m-%d %H:%M')
+        add_log_details(msg=log_msg)
 
         # 通过条件判断及邮件赋值，开始执行任务
         org=form.org.data # currently only support one org one time
@@ -127,11 +129,12 @@ def ctb_run():
 
         description=form.description.data.strip()
 
-        log_msg.append('Org: ' + org)
-        log_msg.append('BU: ' + bu)
         class_code_exclusion=form.class_code_exclusion.data
         class_code_exclusion=class_code_exclusion.strip().split('/')
         class_code_exclusion=[x+'-' for x in class_code_exclusion]
+        log_msg_main.append('Org: {}; BU: {}; Exclusion code: {}'.format(org,bu,class_code_exclusion))
+        log_msg = '\nOrg: {}; BU: {}; exclusion class: {}'.format(org,bu, class_code_exclusion)
+        add_log_details(msg=log_msg)
 
         f_3a4 = form.file_3a4.data
         f_supply= form.file_supply.data
@@ -140,76 +143,77 @@ def ctb_run():
         #file_path_3a4 = os.path.join(app.config['UPLOAD_PATH'],'3a4.csv')
         #file_path_supply = os.path.join(app.config['UPLOAD_PATH'],'supply.xlsx')
         file_path_3a4 = os.path.join(base_dir_upload, login_user + '_'+ secure_filename(f_3a4.filename))
-        file_path_supply = os.path.join(base_dir_upload, login_user + '_'+ secure_filename(f_supply.filename))
+        file_path_kinaxis_supply = os.path.join(base_dir_upload, login_user + '_'+ secure_filename(f_supply.filename))
 
         f_3a4.save(file_path_3a4)
-        f_supply.save(file_path_supply)
+        f_supply.save(file_path_kinaxis_supply)
 
         # 判断并定义ranking_col
         ranking_col = ranking_col_cust
 
         try:
-            # check file format by reading headers
-            module='checking file format'
-            missing_3a4_col, supply_format_correct = check_input_file_format(file_path_supply,file_path_3a4)
-            if len(missing_3a4_col) >0:
-                flash('Check your 3a4 file! Missing columns in the file you uploaded: {}'.format(missing_3a4_col),'warning')
-                return redirect(url_for('ctb_run',_external=True,_scheme='http',viewarg1=1))
-            if not supply_format_correct:
-                flash('Supply file format error! Ensure header in 2nd row which is default format of Kinaxis file.','warning')
-                return redirect(url_for('ctb_run',_external=True,_scheme='http',viewarg1=1))
+            # read 3a4 and check format
+            df_3a4,error_msg=read_3a4_and_check_format(file_path_3a4, required_3a4_col)
+            if error_msg!='':
+                add_log_details(msg=error_msg)
+                flash(error_msg,'warning')
+                return redirect(url_for('ctb_run', _external=True, _scheme='http', viewarg1=1))
 
-            # 读取3a4,选择相关的org/bu
-            module='read_3a4_and_limit_org_bu'
-            df_3a4 = read_3a4_and_limit_org_bu(file_path_3a4, bu_list, org_list)
+            # read Kinaxis supply and check format
+            df_supply_kinaxis, error_msg=read_kinaxis_supply_and_check_format(file_path_kinaxis_supply, required_kinaxis_supply_col)
+            if error_msg != '':
+                add_log_details(msg=error_msg)
+                flash(error_msg, 'warning')
+                return redirect(url_for('ctb_run', _external=True, _scheme='http', viewarg1=1))
+
+            # 选择相关的org/bu
+            df_3a4 = limit_3a4_org_and_bu(df_3a4,org_list,bu_list)
 
             # 读取Exceptional PO from smartsheet and add in 3a4
             df_3a4 = read_and_add_exception_po_to_3a4(df_3a4)
 
-            # 读取supply及相关数据并处理
-            module = 'read_supply_and_process'
-            df_supply = read_supply_and_process(file_path_supply,class_code_exclusion)
+            # 处理 kinaxis supply data
+            df_supply_kinaxis = process_kinaxis_supply(df_supply_kinaxis,class_code_exclusion)
 
             # Rank backlog，allocate supply, and make the summaries
-            module='main_program_all'
-            output_filename=main_program_all(df_3a4, org_list,bu_list,description, ranking_col, df_supply, qend_list, output_col,login_user)
-            flash('CTB file created:{}! You can download accordingly.'.format(output_filename), 'success')
+            output_filename=main_program_all(df_3a4, org_list,bu_list,description, ranking_col, df_supply_kinaxis, qend_list, output_col,login_user)
+            log_msg='CTB file created:{}! You can download accordingly.'.format(output_filename)
+            flash(log_msg, 'success')
+            add_log_details(msg=log_msg)
 
             finish_time = pd.Timestamp.now()
             processing_time = round((finish_time - start_time).total_seconds() / 60, 1)
-            log_msg.append('Processing time: ' + str(processing_time) + ' min')
+            log_msg='Processing time: ' + str(processing_time) + ' min'
+            log_msg_main.append(log_msg)
+            add_log_details(msg=log_msg)
             print('Finish run:',finish_time.strftime('%Y-%m-%d %H:%M'))
 
-            # Write the log file
-            summary='; '.join(log_msg)
-            add_user_log(user=login_user, location='Run', user_action='Run CTB', summary=summary)
+            # Write the log summary
+            summary='; '.join(log_msg_main)
+            add_log_summary(user=login_user, location='Run', user_action='Run CTB', summary=summary)
 
+            # clear memory
+            try:
+                del df_supply_kinaxis, df_3a4
+                gc.collect()
+            except:
+                pass
         except Exception as e:
             try:
-                del df_supply, df_3a4
+                del df_supply_kinaxis, df_3a4
                 gc.collect()
             except:
                 pass
 
-            print(module,': ', e)
             traceback.print_exc()
-            flash('Error encountered in module : {} - {}'.format(module,e),'warning')
+            flash(e,'warning')
             # Write the log file
-            summary = 'Error: ' + str(e)
-            add_user_log(user=login_user, location='Run', user_action='Run CTB', summary=summary)
+            log_msg_main.append('Error: ' + str(e))
+            summary='; '.join(log_msg_main)
+            add_log_summary(user=login_user, location='Run', user_action='Run CTB', summary=summary)
 
-            # write details to error_log.txt
-            log_msg = '\n\n' + login_user + ' ' + pd.Timestamp.now().strftime('%Y-%m-%d %H:%M') + '\n'
-            with open(os.path.join(base_dir_logs, 'error_log.txt'), 'a+') as file_object:
-                file_object.write(log_msg)
-            traceback.print_exc(file=open(os.path.join(base_dir_logs, 'error_log.txt'), 'a+'))
-
-        # clear memory
-        try:
-            del df_supply,df_3a4
-            gc.collect()
-        except:
-            pass
+            # write error log details
+            traceback.print_exc(file=open(os.path.join(base_dir_logs, 'log_details.txt'), 'a+'))
 
         return redirect(url_for('ctb_run',_external=True,_scheme='http',viewarg1=1))
 
