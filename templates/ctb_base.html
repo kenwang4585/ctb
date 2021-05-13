@@ -39,13 +39,9 @@
         {% endblock %}
         <br>
 
-    {% block content %}
-    {% endblock %}
-
-    {% block flash_message %}
-        <!-- below for flashed messages -->
-        <table style="border-collapse:collapse" border="0" cellspacing="0px" align="center">
-            <tbody>
+        {% block flash_message %}
+            <!-- below for flashed messages -->
+            <table style="border-collapse:collapse" border="0" cellspacing="0px" align="center">
                 <tr>
                   <td width="1200" align="left">
                       <main class="container">
@@ -60,9 +56,13 @@
                       </main>
                   </td>
                 </tr>
-            </tbody>
-        </table>
+            </table>
+        {% endblock %}
+
+    {% block content %}
     {% endblock %}
+
+
 </main>
 
     <br><br><br>

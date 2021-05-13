@@ -1,6 +1,10 @@
 import os
 import getpass
 
+allowed_user = ['unknown', 'kwang2', 'anhao', 'cagong', 'hiung', 'julzhou', 'julwu', 'rachzhan', 'alecui', 'daidai',
+                'raeliu', 'karzheng']
+
+
 # Quarter end cutoff
 qend_list=['2020-7-26','2020-10-24','2021-1-23','2021-5-1','2021-7-31']
 
@@ -52,11 +56,13 @@ addressable_window={
 if getpass.getuser()=='ubuntu': # if it's on crate server
     base_dir_output = '/home/ubuntu/ctb_output'
     base_dir_upload='/home/ubuntu/upload_file'
+    base_dir_trash='/home/ubuntu/trash_file'
     base_dir_logs = '/home/ubuntu/logs'
     db_uri='sqlite:////home/ubuntu/database/foo.db'
 else:
     base_dir_output = os.path.join(os.getcwd(),'ctb_output')
     base_dir_upload = os.path.join(os.getcwd(),'upload_file')
+    base_dir_trash = os.path.join(os.getcwd(),'trash_file')
     base_dir_logs = os.path.join(os.getcwd(), 'logs')
     db_uri= 'sqlite:///' + os.path.join(os.getcwd(), 'database') + '/foo.db'
 

@@ -24,7 +24,7 @@ import traceback
 
 
 
-@app.route('/ctb_result', methods=['GET', 'POST'])
+@app.route('/ctb_result', methods=['GET'])
 def ctb_result():
     login_user=request.headers.get('Oidc-Claim-Sub')
     login_name = request.headers.get('Oidc-Claim-Fullname')
@@ -32,7 +32,6 @@ def ctb_result():
         login_user = 'unknown'
         login_name = 'unknown'
 
-    allowed_user=['unknown','kwang2','anhao','cagong','hiung','julzhou','julwu','rachzhan','alecui','daidai','raeliu','karzheng']
     if login_user not in allowed_user:
         raise ValueError
 
@@ -41,53 +40,20 @@ def ctb_result():
     # get file info
     output_record_hours = 360
     upload_record_hours = 240
+    trash_record_hours = 240
     df_output = get_file_info_on_drive(base_dir_output, keep_hours=output_record_hours)
     df_upload = get_file_info_on_drive(base_dir_upload, keep_hours=upload_record_hours)
-
-
-    if form.validate_on_submit():
-        fname = form.file_name_delete.data
-        if login_user in fname:
-            if fname in df_output.File_name.values:
-                f_path = df_output[df_output.File_name == fname].File_path.values[0]
-                os.remove(f_path)
-                msg = '{} removed!'.format(fname)
-                flash(msg, 'success')
-            elif fname in df_upload.File_name.values:
-                f_path = df_upload[df_upload.File_name == fname].File_path.values[0]
-                os.remove(f_path)
-                msg = '{} removed!'.format(fname)
-                flash(msg, 'success')
-            else:
-                add_log_summary(user=login_user, location='Download', user_action='Delete file',
-                             summary='Fail: {}'.format(fname))
-                msg = 'Verify file name you put in and ensure a correct file name here: {}'.format(fname)
-                flash(msg, 'warning')
-                return redirect(url_for('ctb_result',_external=True,_scheme='http',viewarg1=1))
-            add_log_summary(user=login_user, location='Download', user_action='Delete file',
-                         summary='Success: {}'.format(fname))
-        else:
-            msg = 'You are not allowed to delete this file created by others: {}'.format(fname)
-            flash(msg, 'warning')
-            return redirect(url_for('ctb_result',_external=True,_scheme='http',viewarg1=1))
-
+    df_trash = get_file_info_on_drive(base_dir_trash, keep_hours=trash_record_hours)
 
     return render_template('ctb_result.html',form=form,
                            files_output=df_output.values,
                            output_record_days=int(output_record_hours / 24),
                            files_uploaded=df_upload.values,
                            upload_record_days=int(upload_record_hours / 24),
-                           user=login_name)
-
-#@app.route('/ctb_about', methods=['GET', 'POST'])
-#def ctb_about():
-#    login_user=request.headers.get('Oidc-Claim-Sub')
-#    login_name = request.headers.get('Oidc-Claim-Fullname')
-#    if login_user == None:
-#        login_user = ''
-#        login_name = ''
-
-#    return render_template('ctb_about.html',user=login_name)
+                           files_trash=df_trash.values,
+                           trash_record_days=int(trash_record_hours / 24),
+                           user=login_name,
+                           login_user=login_user)
 
 @app.route('/ctb', methods=['GET', 'POST'])
 def ctb_run():
@@ -95,9 +61,6 @@ def ctb_run():
     # as these email valiable are redefined below in email_to_only check, thus have to use global to define here in advance
     # otherwise can't be used. (as we create new vaiables with _ suffix thus no need to set global variable)
     # global backlog_dashboard_emails
-    program_log = []
-    user_selection = []
-    time_details=[]
 
     login_user=request.headers.get('Oidc-Claim-Sub')
     login_name = request.headers.get('Oidc-Claim-Fullname')
@@ -105,11 +68,10 @@ def ctb_run():
         login_user = 'unknown'
         login_name = 'unknown'
 
-    allowed_user=['unknown','kwang2','cagong','hiung','julzhou','julwu','rachzhan','alecui','daidai','raeliu','karzheng']
     if login_user not in allowed_user:
         raise ValueError
 
-    if login_user != 'kwang2':
+    if login_user not in ['kwang2','unknown']:
         add_log_summary(user=login_user, location='Home-RUN', user_action='Visit', summary='')
 
     if form.validate_on_submit():
@@ -220,23 +182,84 @@ def ctb_run():
     return render_template('ctb_run.html', form=form,user=login_name)
 
 
+@app.route('/o/<login_user>/<filename>',methods=['GET'])
+def delete_file_output(login_user,filename):
+    if login_user == 'unknown':
+        http_scheme = 'http'
+    else:
+        http_scheme = 'https'
+
+    if login_user in filename:
+        os.rename(os.path.join(base_dir_output,filename),os.path.join(base_dir_trash,filename))
+        msg='File removed: {}'.format(filename)
+        flash(msg,'success')
+    else:
+        msg='You can only delete file created by yourself!'
+        flash(msg,'warning')
+
+    return redirect(url_for("ctb_result", _external=True, _scheme='http', viewarg1=1))
+
+@app.route('/u/<login_user>/<filename>',methods=['GET'])
+def delete_file_upload(login_user,filename):
+    if login_user in filename:
+        os.rename(os.path.join(base_dir_upload,filename),os.path.join(base_dir_trash,filename))
+        msg='File removed: {}'.format(filename)
+        flash(msg,'success')
+    else:
+        msg='You can only delete file uploaded by yourself!'
+        flash(msg,'warning')
+
+    return redirect(url_for("ctb_result", _external=True, _scheme='http', viewarg1=1))
+
+@app.route('/recover/<login_user>/<filename>', methods=['GET'])
+def recover_file_trash(login_user, filename):
+    if login_user == 'unknown':
+        http_scheme = 'http'
+    else:
+        http_scheme = 'https'
+
+    if 'CTB' in filename:
+        dest_path=base_dir_output
+    else:
+        dest_path=base_dir_upload
+
+    if login_user in filename:
+        os.rename(os.path.join(base_dir_trash, filename), os.path.join(dest_path, filename))
+        msg = 'File put back to original place: {}'.format(filename)
+        flash(msg, 'success')
+    else:
+        msg = 'You can only operate file created by yourself!'
+        flash(msg, 'warning')
+
+    return redirect(url_for("ctb_result", _external=True, _scheme='http', viewarg1=1))
+
+@app.route('/t/<filename>',methods=['GET'])
+def download_file_trash(filename):
+    f_path=base_dir_trash
+    login_user = request.headers.get('Oidc-Claim-Sub')
+
+    if login_user != 'unknown':
+        add_log_summary(user=login_user, location='Result', user_action='Download file',
+                 summary=filename)
+
+    return send_from_directory(f_path, filename=filename, as_attachment=True)
+
 @app.route('/o/<filename>',methods=['GET'])
 def download_file_output(filename):
     f_path=base_dir_output
     print(f_path)
     login_user = request.headers.get('Oidc-Claim-Sub')
-    if login_user != None:
-        add_log_summary(user=login_user, location='Download', user_action='Download file',
+    if login_user != 'unknown':
+        add_log_summary(user=login_user, location='Result', user_action='Download file',
                  summary=filename)
     return send_from_directory(f_path, filename=filename, as_attachment=True)
 
 @app.route('/u/<filename>',methods=['GET'])
 def download_file_upload(filename):
     f_path=base_dir_upload
-    print(f_path)
     login_user = request.headers.get('Oidc-Claim-Sub')
-    if login_user != None:
-        add_log_summary(user=login_user, location='Download', user_action='Download file',
+    if login_user != 'unknown':
+        add_log_summary(user=login_user, location='Result', user_action='Download file',
                  summary=filename)
     return send_from_directory(f_path, filename=filename, as_attachment=True)
 
@@ -246,7 +269,7 @@ def download_file_logs(filename):
     print(f_path)
     login_user = request.headers.get('Oidc-Claim-Sub')
     if login_user != None:
-        add_log_summary(user=login_user, location='Download', user_action='Download file',
+        add_log_summary(user=login_user, location='Result', user_action='Download file',
                  summary=filename)
     return send_from_directory(f_path, filename=filename, as_attachment=True)
 
