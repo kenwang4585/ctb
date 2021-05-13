@@ -59,12 +59,12 @@ def ctb_result():
                 msg = '{} removed!'.format(fname)
                 flash(msg, 'success')
             else:
-                add_user_log(user=login_user, location='Download', user_action='Delete file',
+                add_log_summary(user=login_user, location='Download', user_action='Delete file',
                              summary='Fail: {}'.format(fname))
                 msg = 'Verify file name you put in and ensure a correct file name here: {}'.format(fname)
                 flash(msg, 'warning')
                 return redirect(url_for('ctb_result',_external=True,_scheme='http',viewarg1=1))
-            add_user_log(user=login_user, location='Download', user_action='Delete file',
+            add_log_summary(user=login_user, location='Download', user_action='Delete file',
                          summary='Success: {}'.format(fname))
         else:
             msg = 'You are not allowed to delete this file created by others: {}'.format(fname)
@@ -226,7 +226,7 @@ def download_file_output(filename):
     print(f_path)
     login_user = request.headers.get('Oidc-Claim-Sub')
     if login_user != None:
-        add_user_log(user=login_user, location='Download', user_action='Download file',
+        add_log_summary(user=login_user, location='Download', user_action='Download file',
                  summary=filename)
     return send_from_directory(f_path, filename=filename, as_attachment=True)
 
@@ -236,7 +236,7 @@ def download_file_upload(filename):
     print(f_path)
     login_user = request.headers.get('Oidc-Claim-Sub')
     if login_user != None:
-        add_user_log(user=login_user, location='Download', user_action='Download file',
+        add_log_summary(user=login_user, location='Download', user_action='Download file',
                  summary=filename)
     return send_from_directory(f_path, filename=filename, as_attachment=True)
 
@@ -246,7 +246,7 @@ def download_file_logs(filename):
     print(f_path)
     login_user = request.headers.get('Oidc-Claim-Sub')
     if login_user != None:
-        add_user_log(user=login_user, location='Download', user_action='Download file',
+        add_log_summary(user=login_user, location='Download', user_action='Download file',
                  summary=filename)
     return send_from_directory(f_path, filename=filename, as_attachment=True)
 
@@ -267,7 +267,7 @@ def ctb_admin():
 
     if login_user!='unknown' and login_user!='kwang2':
         return redirect(url_for('ctb_run',_external=True,_scheme='http',viewarg1=1))
-        add_user_log(user=login_user, location='Admin', user_action='Visit', summary='Why happens?')
+        add_log_summary(user=login_user, location='Admin', user_action='Visit', summary='Why happens?')
 
     # get file info
     output_record_hours=360
