@@ -2108,8 +2108,8 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
     # output the file
     data_to_write={
                     'build_projection':df_po_ctb,
-                   'fcd_vs_ctb':df_fcd_ctb_summary,
-                  'decommit_vs_pullin':df_decommit_improve_summary,
+                   'agg_fcd_vs_ctb':df_fcd_ctb_summary,
+                  'ss_decommit_vs_pullin':df_decommit_improve_summary,
                    #'riso_status(vs LT target)':df_riso,
                    #'sd_shortage_pn(vs LT target)':df_sd_combined_short,
                    'build_impact_wk0':build_impact_summary_wk0,
@@ -2130,7 +2130,7 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
     if bu=='' and description=='':
         output_filename = orgs + ' CTB '+dt+ ' ' + login_user + '.xlsx'
     else:
-        output_filename = orgs + '(' + bu + ' ' + description + ') CTB ' + dt + ' ' + login_user + '.xlsx'
+        output_filename = orgs + ' CTB (' + bu + ' ' + description + ')' + dt + ' ' + login_user + '.xlsx'
 
     write_data_to_spreadsheet(base_dir_output, output_filename, data_to_write)
 
