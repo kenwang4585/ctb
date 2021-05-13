@@ -6,5 +6,6 @@ __pycache__/
 ctb_output/*
 input_data/*
 upload_file/*
+trash_file/*
 logs/*
 !.keep
