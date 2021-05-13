@@ -11,7 +11,7 @@
             <td>
                 <ul class="nav nav-tabs">
                     <li class="active" style="font-size: large"><a href="{{ url_for('ctb_run')}}"><strong>CTB</strong></a></li>
-                    <li style="font-size: large"><a href="{{ url_for('ctb_download')}}"><strong>Download</strong></a></li>
+                    <li style="font-size: large"><a href="{{ url_for('ctb_result')}}"><strong>Result</strong></a></li>
                 </ul>
             </td>
         </tr>
@@ -25,7 +25,7 @@
         <table style="border-collapse:collapse; background-color: #eeeeee" border="0" cellspacing="0px" width="90%" align="center">
     		<tr align="center">
                 <td width="5%"></td>
-                <td width='40%' align="left">
+                <td width='30%' align="left">
                         <strong>Upload 3A4 backlog file (.csv):</strong>
                         {{ form.file_3a4 }}
                             <br><br><br>
@@ -37,13 +37,14 @@
                 <td width="10%">
                 </td>
 
-                <td width="40%" align="left">
+                <td width="50%" align="left">
                     <br>
                     <div class="form-group">
-                    <strong>{{ form.org.label }}</strong><br>{{ form.org (class='form-control') }}<br>
-                    <strong>{{ form.bu.label }}</strong><br>{{ form.bu (class='form-control')}}<br>
-                    <strong>{{ form.class_code_exclusion.label }}</strong><br>{{ form.class_code_exclusion (class='form-control')}}<br><br>                    </div>
-
+                        <strong>{{ form.org.label }}</strong><br>{{ form.org (class='form-control') }}<br>
+                        <strong>{{ form.bu.label }}</strong><br>{{ form.bu (class='form-control')}}<br>
+                        <strong>{{ form.class_code_exclusion.label }}</strong><br>{{ form.class_code_exclusion (class='form-control')}}<br>
+                        <strong>{{ form.description.label }}</strong><br>{{ form.description  (class='form-control')}}<br><br>
+                    </div>
                 </td>
                 <td width="5%"></td>
             </tr>

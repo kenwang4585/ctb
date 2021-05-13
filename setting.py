@@ -13,8 +13,8 @@ transit_time={'FOC':2, # from FOL to FOC
               }
 
 output_col=['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY', 'SO_SS', 'PO_NUMBER','distinct_po_filter', 'EXCEPTION_NAME','PRODUCT_ID',
-           'BOM_PN','ADDRESSABLE_FLAG','priority_cat','priority_rank','ss_overall_rank','ORDER_HOLDS','CURRENT_QUARTER_REVENUE_ELIGIBILITY',
-            'END_CUSTOMER_NAME','SHIP_TO_CUSTOMER_NAME','CUSTOMER_REQUEST_DATE','CUSTOMER_REQUESTED_SHIP_DATE',
+           'BOM_PN','ADDRESSABLE_FLAG','priority_cat','priority_rank','ss_overall_rank',
+            'CUSTOMER_REQUEST_DATE','CUSTOMER_REQUESTED_SHIP_DATE',
            'CURRENT_FCD_NBD_DATE','ORIGINAL_FCD_NBD_DATE', 'TARGET_SSD','LT_TARGET_FCD','C_UNSTAGED_DOLLARS',
             'ss_unstg_rev','ss_rev_rank','PROGRAM',
             'ORDERED_QUANTITY','C_UNSTAGED_QTY','PACKOUT_QUANTITY','supply_allocation','tan_qty_wo_supply',
@@ -42,10 +42,12 @@ if getpass.getuser()=='ubuntu': # if it's on crate server
     base_dir_output = '/home/ubuntu/ctb_output'
     base_dir_upload='/home/ubuntu/upload_file'
     base_dir_logs = '/home/ubuntu/logs'
+    db_uri='sqlite:////home/ubuntu/database/foo.db'
 else:
     base_dir_output = os.path.join(os.getcwd(),'ctb_output')
     base_dir_upload = os.path.join(os.getcwd(),'upload_file')
     base_dir_logs = os.path.join(os.getcwd(), 'logs')
+    db_uri= 'sqlite:///' + os.path.join(os.getcwd(), 'database') + '/foo.db'
 
 
 # rank sequences

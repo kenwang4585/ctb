@@ -24,8 +24,8 @@ import traceback
 
 
 
-@app.route('/ctb_download', methods=['GET', 'POST'])
-def ctb_download():
+@app.route('/ctb_result', methods=['GET', 'POST'])
+def ctb_result():
     login_user=request.headers.get('Oidc-Claim-Sub')
     login_name = request.headers.get('Oidc-Claim-Fullname')
     if login_user == None:
@@ -63,16 +63,16 @@ def ctb_download():
                              summary='Fail: {}'.format(fname))
                 msg = 'Verify file name you put in and ensure a correct file name here: {}'.format(fname)
                 flash(msg, 'warning')
-                return redirect(url_for('ctb_download',_external=True,_scheme='http',viewarg1=1))
+                return redirect(url_for('ctb_result',_external=True,_scheme='http',viewarg1=1))
             add_user_log(user=login_user, location='Download', user_action='Delete file',
                          summary='Success: {}'.format(fname))
         else:
             msg = 'You are not allowed to delete this file created by others: {}'.format(fname)
             flash(msg, 'warning')
-            return redirect(url_for('ctb_download',_external=True,_scheme='http',viewarg1=1))
+            return redirect(url_for('ctb_result',_external=True,_scheme='http',viewarg1=1))
 
 
-    return render_template('ctb_download.html',form=form,
+    return render_template('ctb_result.html',form=form,
                            files_output=df_output.values,
                            output_record_days=int(output_record_hours / 24),
                            files_uploaded=df_upload.values,
@@ -105,7 +105,7 @@ def ctb_run():
         login_user = 'unknown'
         login_name = 'unknown'
 
-    allowed_user=['unknown','kwang2','anhao','cagong','hiung','julzhou','julwu','rachzhan','alecui','daidai','raeliu','karzheng']
+    allowed_user=['unknown','kwang2','cagong','hiung','julzhou','julwu','rachzhan','alecui','daidai','raeliu','karzheng']
     if login_user not in allowed_user:
         raise ValueError
 
@@ -124,6 +124,8 @@ def ctb_run():
 
         bu=form.bu.data
         bu_list=bu.strip().upper().split('/')
+
+        description=form.description.data.strip()
 
         log_msg.append('Org: ' + org)
         log_msg.append('BU: ' + bu)
@@ -170,7 +172,7 @@ def ctb_run():
 
             # Rank backlog，allocate supply, and make the summaries
             module='main_program_all'
-            output_filename=main_program_all(df_3a4, org_list,bu_list,ranking_col, df_supply, qend_list, output_col,login_user)
+            output_filename=main_program_all(df_3a4, org_list,bu_list,description, ranking_col, df_supply, qend_list, output_col,login_user)
             flash('CTB file created:{}! You can download accordingly.'.format(output_filename), 'success')
 
             finish_time = pd.Timestamp.now()

@@ -1,11 +1,12 @@
-from flask_setting import *
+from flask_settings import *
 from sqlalchemy import create_engine
 import os
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import MetaData
+from setting import db_uri
 
 def drop_table():
-   engine = create_engine(os.getenv('DB_URI'))
+   engine = create_engine(db_uri)
    print('Existing tables:', engine.table_names())
 
    table_name = input('Input table name to drop:')
@@ -16,7 +17,7 @@ def drop_table():
    if table is not None:
        base.metadata.drop_all(engine, [table], checkfirst=True)
 
-   engine = create_engine(os.getenv('DB_URI'))
+   engine = create_engine(db_uri)
    print('Current tables:', engine.table_names())
 
 

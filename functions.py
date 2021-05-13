@@ -1327,6 +1327,7 @@ def make_summary_build_projection(df_3a4,bu_list):
     df_po_ctb_bu.reset_index(inplace=True)
     df_po_ctb_bu.loc[:,'PRODUCT_FAMILY']='All PF'
     df_po_ctb_bu.set_index(['ORGANIZATION_CODE', 'BUSINESS_UNIT','PRODUCT_FAMILY'],inplace=True)
+
     df_po_ctb_bu=resample_columns_and_agg_pastdue(df_po_ctb_bu,method='W-SAT',agg_col_name='Current week',
                                                total_col='Total',total_row=('Total','Total','Total'),convert_num=True)
     df_po_ctb_bu.sort_values(by=['ORGANIZATION_CODE', 'Current week'], ascending=False, inplace=True)
@@ -1364,13 +1365,11 @@ def make_summary_build_projection(df_3a4,bu_list):
 
     return df_build_projection
 
-def make_summary_order_status(df_3a4):
+def make_summary_decommit_vs_improve(df_3a4):
     """
-    Create summary to indicate the order status against current FCD
-    :param df_3a4:
-    :return:
+    Create summary to indicate the order pull in or decommit status against current FCD based on SO_SS
     """
-    df_order_status = df_3a4.drop_duplicates('SO_SS').pivot_table(index=['ORGANIZATION_CODE','BUSINESS_UNIT','ss_updated_status'],
+    df_order_status = df_3a4.drop_duplicates('SO_SS').pivot_table(index=['ORGANIZATION_CODE','BUSINESS_UNIT','PRODUCT_FAMILY','ss_updated_status'],
                             columns='CURRENT_FCD_NBD_DATE', # this will leave out the orders without FCD date - unscheduled
                             values='ss_unstg_rev',
                             aggfunc=sum)
@@ -1863,16 +1862,11 @@ def read_backlog_priority_from_smartsheet(df_3a4,login_user):
         (df_smart_self.ORG.isin(df_3a4.ORGANIZATION_CODE.unique())) & (df_smart_self.BU.isin(df_3a4.BUSINESS_UNIT.unique()))]
     ss_not_in_3a4 = np.setdiff1d(df_smart_w_org_bu_in_3a4.SO_SS.values, df_3a4.SO_SS.values)
 
-    print('user',login_user)
-    print(df_smart)
-    print(df_smart_self)
-    print(ss_not_in_3a4)
+    # SS showing as packed or cancelled in 3a4 - discard below
+    #ss_cancelled_or_packed_3a4 = get_packed_or_cancelled_ss_from_3a4(df_3a4)
 
-    # SS showing as packed or cancelled in 3a4
-    ss_cancelled_or_packed_3a4 = get_packed_or_cancelled_ss_from_3a4(df_3a4)
-
-    # total ss to remove
-    df_removal = df_smart[(df_smart.SO_SS.isin(ss_cancelled_or_packed_3a4)) | (df_smart.SO_SS.isin(ss_not_in_3a4))]
+    # total ss to remove - discard below
+    #df_removal = df_smart[(df_smart.SO_SS.isin(ss_cancelled_or_packed_3a4)) | (df_smart.SO_SS.isin(ss_not_in_3a4))]
 
     # create the priority dict
     df_smart.drop_duplicates('SO_SS', keep='last', inplace=True)
@@ -1892,7 +1886,7 @@ def read_backlog_priority_from_smartsheet(df_3a4,login_user):
         ss_exceptional_priority['priority_top'] = priority_top
         ss_exceptional_priority['priority_mid'] = priority_mid
 
-    return ss_exceptional_priority,df_removal
+    return ss_exceptional_priority
 
 def remove_priority_ss_from_smtsheet_and_notify(df_removal,login_user,sender='APJC DFPM'):
     """
@@ -1922,8 +1916,109 @@ def remove_priority_ss_from_smtsheet_and_notify(df_removal,login_user,sender='AP
                                          user=login_user)
 
 
+def make_summary_fcd_vs_ctb(df_3a4):
+    """
+    Make summary by PF to indicate the difference between current FCD and PO_CTB date.
+    """
 
-def main_program_all(df_3a4,org_list, bu_list, ranking_col,df_supply,qend_list,output_col,login_user):
+    dfx = df_3a4[(df_3a4.distinct_po_filter == 'YES')].copy()
+
+    # add in date_180 for unscheduled order to avoid potential error if all PO are unscheduled
+    date_180 = pd.Timestamp.today().date() + pd.Timedelta(180, 'd')
+    dfx.CURRENT_FCD_NBD_DATE.fillna(date_180,inplace=True)
+
+    # create summary by FCD date
+    df10 = dfx.pivot_table(index=['ORGANIZATION_CODE'], columns='CURRENT_FCD_NBD_DATE', values='C_UNSTAGED_DOLLARS',
+                           aggfunc=sum).reset_index()
+    df11 = dfx.pivot_table(index=['ORGANIZATION_CODE', 'BUSINESS_UNIT'], columns='CURRENT_FCD_NBD_DATE',
+                           values='C_UNSTAGED_DOLLARS', aggfunc=sum).reset_index()
+    df12 = dfx.pivot_table(index=['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY'],
+                           columns='CURRENT_FCD_NBD_DATE', values='C_UNSTAGED_DOLLARS', aggfunc=sum).reset_index()
+
+    df1 = pd.concat([df10, df11, df12], sort=False)
+
+    df1 = df1.set_index(['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY']).sort_values(
+        ['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY'])
+
+    df1 = df1.reset_index()
+
+    df1.BUSINESS_UNIT.fillna('zTotal - all BU', inplace=True)
+
+    df1.loc[:, 'PRODUCT_FAMILY'] = df1.apply(
+        lambda x: 'zTotal - ' + x.BUSINESS_UNIT if pd.isnull(x.PRODUCT_FAMILY) else x.PRODUCT_FAMILY, axis=1)
+
+    # create summary by po_ctb date
+    df20 = dfx.pivot_table(index=['ORGANIZATION_CODE'], columns='po_ctb', values='C_UNSTAGED_DOLLARS',
+                           aggfunc=sum).reset_index()
+    df21 = dfx.pivot_table(index=['ORGANIZATION_CODE', 'BUSINESS_UNIT'], columns='po_ctb', values='C_UNSTAGED_DOLLARS',
+                           aggfunc=sum).reset_index()
+    df22 = dfx.pivot_table(index=['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY'], columns='po_ctb',
+                           values='C_UNSTAGED_DOLLARS', aggfunc=sum).reset_index()
+
+    df2 = pd.concat([df20, df21, df22], sort=False)
+
+    df2 = df2.set_index(['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY']).sort_values(
+        ['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY'])
+
+    df2 = df2.reset_index()
+
+    df2.BUSINESS_UNIT.fillna('zTotal - all BU', inplace=True)
+
+    df2.loc[:, 'PRODUCT_FAMILY'] = df2.apply(
+        lambda x: 'zTotal - ' + x.BUSINESS_UNIT if pd.isnull(x.PRODUCT_FAMILY) else x.PRODUCT_FAMILY, axis=1)
+
+    # Add FCD and CTB mark respectively and concat the df
+    df1.loc[:, 'Item'] = 'FCD'
+    df2.loc[:, 'Item'] = 'CTB'
+    dfc = pd.concat([df1, df2], sort=False)
+
+    dfc.reset_index(inplace=True)
+    dfc.drop('index', axis=1, inplace=True)
+
+    # Resample the data to weekly
+    dfc.set_index(['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY', 'Item'], inplace=True)
+    dfc=resample_columns_and_agg_pastdue(dfc, method='W-SAT', agg_col_name='Current week', total_col=None, total_row=None,
+                                     convert_num=True)
+
+    dfc.loc[:, 'Total'] = dfc.sum(axis=1)
+    # sort the data
+    dfc.sort_values(['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY'], inplace=True)
+
+    dfc.to_excel('test.xlsx')
+    # calculate Cum delta between FCD and CTB
+    dfc.fillna(0, inplace=True)
+    for row in dfc.itertuples():
+        if row.Index[3] == 'CTB':
+            pre_col_value = 0
+            for col in dfc.columns:
+                if col != dfc.columns[-1]:
+                    dfc.loc[(row.Index[0], row.Index[1], row.Index[2], 'Cum delta'), col] = pre_col_value + \
+                                                                                            dfc.loc[(row.Index[0], row.Index[1], row.Index[2], 'CTB'), col] - \
+                                                                                            dfc.loc[(row.Index[0], row.Index[1],row.Index[2], 'FCD'), col]
+                    pre_col_value = dfc.loc[(row.Index[0], row.Index[1], row.Index[2], 'Cum delta'), col]
+                else:
+                    dfc.loc[(row.Index[0], row.Index[1], row.Index[2], 'Cum delta'), col] = pre_col_value
+
+    # Sort the data by index
+    dfc.sort_values(['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY'], inplace=True)
+
+    # correct the total label after sorting
+    dfc.reset_index(inplace=True)
+    dfc.loc[:, 'BUSINESS_UNIT'] = np.where(dfc.BUSINESS_UNIT == 'zTotal - all BU',
+                                           'Total - all BU',
+                                           dfc.BUSINESS_UNIT)
+    dfc.loc[:, 'PRODUCT_FAMILY'] = np.where(dfc.PRODUCT_FAMILY == 'zTotal - zTotal - all BU',
+                                            'Total - all PF',
+                                            dfc.PRODUCT_FAMILY)
+    dfc.loc[:, 'PRODUCT_FAMILY'] = np.where(dfc.PRODUCT_FAMILY.str.contains('zTotal'),
+                                            dfc.PRODUCT_FAMILY.str[1:],
+                                            dfc.PRODUCT_FAMILY)
+    dfc.set_index(['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY', 'Item'], inplace=True)
+
+    return dfc
+
+
+def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply,qend_list,output_col,login_user):
     """
     Consolidated main functions for this programs.
     :param df_3a4:
@@ -1941,10 +2036,10 @@ def main_program_all(df_3a4,org_list, bu_list, ranking_col,df_supply,qend_list,o
     df_3a4=redefine_addressable_flag_main_pip_version(df_3a4)
 
     # read smartsheet priorities
-    ss_exceptional_priority, df_removal = read_backlog_priority_from_smartsheet(df_3a4, login_user)
+    ss_exceptional_priority = read_backlog_priority_from_smartsheet(df_3a4, login_user)
 
-    # Remove and send email notification for ss removal from exceptional priority smartsheet
-    remove_priority_ss_from_smtsheet_and_notify(df_removal, login_user, sender='APJC DF - auto CTB')
+    # Remove and send email notification for ss removal from exceptional priority smartsheet - discard below
+    #remove_priority_ss_from_smtsheet_and_notify(df_removal, login_user, sender='APJC DF - auto CTB')
 
     # remove cancelled/packed orders - remove the record from 3a4 (in creating blg dict it's double removed - together with packed orders)
     df_3a4 = df_3a4[(df_3a4.ADDRESSABLE_FLAG != 'PO_CANCELLED') & (df_3a4.PACKOUT_QUANTITY != 'Packout Completed')].copy()
@@ -1997,8 +2092,9 @@ def main_program_all(df_3a4,org_list, bu_list, ranking_col,df_supply,qend_list,o
 
     # make summaries
     df_po_ctb=make_summary_build_projection(df_3a4,bu_list)
-    df_order_status=make_summary_order_status(df_3a4)
-    df_riso = make_summary_riso(df_3a4)
+    df_decommit_improve_summary=make_summary_decommit_vs_improve(df_3a4)
+    #df_riso = make_summary_riso(df_3a4)
+    df_fcd_ctb_summary=make_summary_fcd_vs_ctb(df_3a4)
 
     # make supply/demand summaries:for shortage PN
     #df_sd_combined_short=make_sd_summary(df_3a4, df_supply,supply_source, date_col='min_date')
@@ -2010,11 +2106,11 @@ def main_program_all(df_3a4,org_list, bu_list, ranking_col,df_supply,qend_list,o
     df_3a4, build_impact_qend,output_col = make_summary_build_impact(df_3a4, df_supply,output_col,qend,blg_with_allocation,FLT,cut_off='qend')
 
     # output the file
-    data_to_write={'3a4':df_3a4[output_col].set_index('ORGANIZATION_CODE'),
-                   'supply':df_supply,
+    data_to_write={
                     'build_projection':df_po_ctb,
-                  'order_status(vs FCD)':df_order_status,
-                   'riso_status(vs LT target)':df_riso,
+                   'fcd_vs_ctb':df_fcd_ctb_summary,
+                  'decommit_vs_pullin':df_decommit_improve_summary,
+                   #'riso_status(vs LT target)':df_riso,
                    #'sd_shortage_pn(vs LT target)':df_sd_combined_short,
                    'build_impact_wk0':build_impact_summary_wk0,
                     #'build_impact_wk1':build_impact_summary_wk1,
@@ -2024,13 +2120,17 @@ def main_program_all(df_3a4,org_list, bu_list, ranking_col,df_supply,qend_list,o
                    # 'shortage_qty(vs FCD)':df_shortage_qty_fcd,
                    #'shortage_impact(vs LT target)': df_shortage_impact_lt_target_fcd,
                    #'shortage_qty(vs LT target)': df_shortage_qty_lt_target_fcd,
-
-                   '0_qty_po': df_3a4_zero_qty,
+                    '3a4': df_3a4[output_col].set_index('ORGANIZATION_CODE'),
+                    'supply': df_supply,
                    }
     # save the output file
     orgs='_'.join(org_list)
+    bu='_'.join(bu_list)
     dt=(pd.Timestamp.now()+pd.Timedelta(hours=8)).strftime('%m-%d %Hh%Mm') #convert from server time to local
-    output_filename = orgs + ' CTB '+dt+ ' ' + login_user + '.xlsx'
+    if bu=='' and description=='':
+        output_filename = orgs + ' CTB '+dt+ ' ' + login_user + '.xlsx'
+    else:
+        output_filename = orgs + '(' + bu + ' ' + description + ') CTB ' + dt + ' ' + login_user + '.xlsx'
 
     write_data_to_spreadsheet(base_dir_output, output_filename, data_to_write)
 
@@ -2113,9 +2213,6 @@ def check_input_file_format(fname_supply,fname_3a4):
     supply_format_correct=np.all(np.in1d(required_supply_col,col_supply))
 
     return missing_3a4_col, supply_format_correct
-
-
-
 
 
 

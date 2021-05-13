@@ -1,9 +1,10 @@
 from sqlalchemy import create_engine
 import pandas as pd
+from setting import db_uri
 import os
 
 
-engine = create_engine(os.getenv('DB_URI'))
+engine = create_engine(db_uri)
 #print(engine.table_names())
 
 def read_table(table_name,columns='*',show_last=False,criteria_string=None,records_limit=None):
