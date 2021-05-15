@@ -1248,7 +1248,11 @@ def update_order_bom_to_3a4(df_3a4, df_order_bom,df_supply):
     df_3a4.loc[:,'distinct_po_filter']=np.where(~df_3a4.duplicated('PO_NUMBER'),
                                               'YES',
                                                 '')
-
+    dfx = df_3a4.pivot_table(index='PO_NUMBER', values='PRODUCT_FAMILY', aggfunc=len)
+    dfx = dfx[dfx.PRODUCT_FAMILY == 1]
+    df_3a4.loc[:, 'distinct_po_filter'] = np.where(df_3a4.PO_NUMBER.isin(dfx.index),
+                                                   'YES',
+                                                   df_3a4.distinct_po_filter)
 
     return df_3a4
 
@@ -2087,9 +2091,9 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
     bu='_'.join(bu_list)
     dt=(pd.Timestamp.now()+pd.Timedelta(hours=8)).strftime('%m-%d %Hh%Mm') #convert from server time to local
     if bu=='' and description=='':
-        output_filename = orgs + ' CTB '+dt+ ' ' + login_user + '.xlsx'
+        output_filename = orgs + ' CTB ' + dt + ' ' + login_user + '.xlsx'
     else:
-        output_filename = orgs + ' CTB (' + bu + ' ' + description + ')' + dt + ' ' + login_user + '.xlsx'
+        output_filename = orgs + ' CTB ' + dt + ' ' + login_user + ' (' + bu + ' ' + description + ').xlsx'
 
     write_data_to_spreadsheet(base_dir_output, output_filename, data_to_write)
 
