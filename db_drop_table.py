@@ -6,7 +6,9 @@ from sqlalchemy import MetaData
 from setting import db_uri
 
 def drop_table():
-   engine = create_engine(db_uri)
+   #engine = create_engine(db_uri)
+   engine = create_engine("mysql+pymysql://kw:jackfruits4585@10.123.219.20:3306/kw_db")
+
    print('Existing tables:', engine.table_names())
 
    table_name = input('Input table name to drop:')

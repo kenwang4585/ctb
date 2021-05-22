@@ -1,15 +1,10 @@
-from sqlalchemy import create_engine
 import pandas as pd
-from setting import db_uri
+from sqlalchemy import MetaData,create_engine
 import os
-
-
-engine = create_engine(db_uri)
-#print(engine.table_names())
 
 def read_table(table_name,columns='*',show_last=False,criteria_string=None,records_limit=None):
     '''从表中按条件读取数据'''
-
+    engine = create_engine(os.getenv('ENGINE'))
     if criteria_string==None and records_limit==None:
         sql = 'SELECT '+ columns +' FROM ' + table_name
     elif criteria_string!=None and records_limit==None:

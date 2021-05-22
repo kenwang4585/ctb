@@ -1,18 +1,20 @@
 from flask import Flask
-from flask_wtf.file import FileField, FileRequired
+from flask_wtf.file import FileField
 from flask_wtf import FlaskForm
-from wtforms.validators import Email, DataRequired,input_required
-from wtforms import SubmitField, BooleanField, StringField,IntegerField,SelectField,PasswordField,TextAreaField,RadioField
+from wtforms.validators import DataRequired
+from wtforms import SubmitField, StringField
 import os
 from flask_sqlalchemy import SQLAlchemy
-from setting import db_uri
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'secret string')
 #app.config['UPLOAD_PATH'] = os.path.join(app.root_path, 'upload_file')
 
-app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
+#app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + base_dir_db + os.getenv('DB_URI')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DB_URI')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+#app.config['MAX_CONTENT_LENGTH']=150*1024*1024
+
 
 db = SQLAlchemy(app)
 
@@ -23,11 +25,12 @@ class UploadForm(FlaskForm):
     bu=StringField('Business units: ',render_kw={'placeholder':'e.g. PABU/ERBU; recommend leave blank to run at org level due to common parts across BU.'})
     class_code_exclusion=StringField('Class code to exclude for supply:',
                                      default='47/471/501/502/503/504/55/83/84/90')
-    customer=StringField('(optional)Input customer name to flag(e.g. Google/NTT):')
+    #customer=StringField('(optional)Input customer name to flag(e.g. Google/NTT):')
     description=StringField('Description:',render_kw={'placeholder':'Short description show in output file name'})
 
     file_3a4 = FileField('Upload 3A4 file (.csv):',validators=[DataRequired()])
-    file_supply=FileField('Upload supply file (.xlsx):',validators=[DataRequired()])
+    file_kinaxis_supply=FileField('Upload Kinaxis supply file (.xlsx):',validators=[DataRequired()])
+    file_allocation_supply=FileField('Upload PCBA allocation file (.xlsx):')
     submit_ctb=SubmitField(' RUN CTB ')
 
 class FileDownloadForm(FlaskForm):
@@ -44,7 +47,7 @@ class AdminForm(FlaskForm):
 
 
 # Database tables
-class UserLog(db.Model):
+class CtbUserLog(db.Model):
     '''
     User logs db table
     '''
@@ -52,7 +55,6 @@ class UserLog(db.Model):
     USER_NAME=db.Column(db.String(10))
     DATE=db.Column(db.Date)
     TIME=db.Column(db.String(8))
-    LOCATION=db.Column(db.String(10))
-    USER_ACTION=db.Column(db.String(20))
+    LOCATION=db.Column(db.String(25))
+    USER_ACTION=db.Column(db.String(35))
     SUMMARY=db.Column(db.Text)
-

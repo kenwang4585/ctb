@@ -133,6 +133,7 @@ def allocate_supply_to_backlog_and_calculate_shortage(supply_dic_tan, blg_dic_ta
                 po_qty = list(po.values())[0][0]
                 po_number = list(po.values())[0][1][0]
                 min_date = list(po.values())[0][1][1]
+
                 #option_number = list(po.values())[0][1][1]
                 #target_fcd = list(po_option.values())[0][1][2]
                 #current_fcd = list(po_option.values())[0][1][3]
@@ -260,9 +261,9 @@ def calculate_po_ctb_in_3a4(df_3a4):
     today=pd.Timestamp.today().date()
     date_180=pd.Timestamp.today().date() + pd.Timedelta(180, 'd')
     # using a date instead of ITF for resample purpose
-    df_3a4.loc[:, 'po_ctb'] = np.where((df_3a4.po_supply_ready_date.isnull()) | (df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD'),
+    df_3a4.loc[:, 'po_ctb'] = np.where(df_3a4.po_supply_ready_date.isnull(),
                                        date_180,
-                                       np.where(df_3a4.earliest_packable_date>df_3a4.po_supply_ready_date + pd.Timedelta(3, 'd'),
+                                       np.where(df_3a4.earliest_packable_date>df_3a4.po_supply_ready_date + pd.Timedelta(FLT, 'd'),
                                                 df_3a4.earliest_packable_date,
                                                 df_3a4.po_supply_ready_date + pd.Timedelta(FLT, 'd'))
                                         )
@@ -274,18 +275,18 @@ def calculate_po_ctb_in_3a4(df_3a4):
 
     # add ctb comments
     df_3a4.loc[:,'ctb_comment']=np.where(df_3a4.po_ctb==today,
-                                         'Ready to go',
+                                         'Ready to build',
                                          np.where(df_3a4.po_ctb>df_3a4.earliest_packable_date,
                                                   'Following supply',
-                                                  np.where((df_3a4.CURRENT_FCD_NBD_DATE.isnull()),
-                                                            'Unscheduled - CTB 2wk out',
-                                                            'Following Target FCD or Exception')))
+                                                  np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
+                                                            'Unscheduled - CTB 4wk out',
+                                                           np.where(df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD',
+                                                                    'MFG hold - CTB 4wk out',
+                                                                    'Following Target FCD or Exception'))))
 
     df_3a4.loc[:, 'ctb_comment'] = np.where(df_3a4.po_supply_ready_date.isnull(),
                                             'ITF - no supply recovery',
-                                            np.where(df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD',
-                                                     'ITF - MFG Hold',
-                                                     df_3a4.ctb_comment))
+                                            df_3a4.ctb_comment)
 
     return df_3a4
 
@@ -391,6 +392,100 @@ def read_kinaxis_supply_and_check_format(file_path_kinaxis_supply, required_kina
 
     return df_supply_kinaxis, error_msg
 
+@write_log_time_spent
+def read_pcba_allocation_supply_and_check_format(file_path_allocation_supply):
+    """
+    Read the pcba allocation; use try/except to ensure the right sheets are included
+    """
+    try:
+        df_supply_allocation=pd.read_excel(file_path_allocation_supply,sheet_name='pcba_allocation')
+        df_supply_allocation_transit=pd.read_excel(file_path_allocation_supply,sheet_name='in-transit')
+        df_supply_tan_transit_time=pd.read_excel(file_path_allocation_supply,sheet_name='transit_time_from_sourcing_rule')
+        error_msg = ''
+    except:
+        error_msg="PCBA allocation file format error! Check sheets name: 'pcba_allocation','in-transit','transit_time_from_sourcing_rule'"
+
+    return df_supply_allocation,df_supply_allocation_transit,df_supply_tan_transit_time, error_msg
+
+@write_log_time_spent
+def consolidate_pcba_allocation_supply(df_supply_allocation,df_supply_tan_transit_time,df_supply_allocation_transit,org_list):
+    """
+    Process and consolidate the supply from PCBA allocation file into a format that need to integrate with Kinaxis supply data
+    Org_list is just a single org currently
+    """
+
+    # get transit pad -- single DF ORG case
+    df_supply_tan_transit_time = df_supply_tan_transit_time[df_supply_tan_transit_time.DF_site.isin(org_list)].copy()
+    #print(df_supply_tan_transit_time)
+    transit_time=df_supply_tan_transit_time.iloc[0,4]
+    if transit_time==0:
+        transit_time=1
+
+    # process supply allocation data and apply transit time
+    df_supply_allocation=df_supply_allocation[df_supply_allocation.ORG.isin(org_list)].copy()
+
+    col=df_supply_allocation.columns.to_list()
+    ind_start = col.index('Blg_recovery') + 1
+    ind_finish = col.index('Target_SSD_7')
+    date_col=col[ind_start:ind_finish]
+
+    needed_col=['TAN_','ORG','OH'] + date_col
+    df_supply_allocation=df_supply_allocation[needed_col].copy()
+    df_supply_allocation.rename(columns={'OH':'Past','TAN_':'TAN'},inplace=True)
+    # apply transit pad to DF into the SCR
+    df_supply_allocation.set_index(['TAN','ORG','Past'],inplace=True)
+    col=pd.to_datetime(df_supply_allocation.columns)
+    col=[(dt+pd.Timedelta(transit_time,'d')).date() for dt in col]
+    df_supply_allocation.columns=col
+    df_supply_allocation.dropna(axis=1, how='all', inplace=True)
+    #df_supply_allocation.reset_index(inplace=True)
+
+    # process in transit data
+    df_supply_allocation_transit.drop('Total',axis=1,inplace=True)
+    df_supply_allocation_transit = df_supply_allocation_transit[df_supply_allocation_transit.DF_site.isin(org_list)].copy()
+    df_supply_allocation_transit.rename(columns={'DF_site':'ORG'},inplace=True)
+    # convert to date
+    if df_supply_allocation_transit.shape[0]>0:
+        df_supply_allocation_transit.loc[:,'Past']=0
+        df_supply_allocation_transit.set_index(['TAN','ORG','Past'],inplace=True)
+        df_supply_allocation_transit.dropna(axis=1,how='all',inplace=True)
+        col =pd.to_datetime(df_supply_allocation_transit.columns)
+        col=[dt.date() for dt in col]
+        df_supply_allocation_transit.columns=col
+
+        # concat df_supply_allocation and df_supply_allocation_transit
+        df_supply_allocation_combined=pd.concat([df_supply_allocation,df_supply_allocation_transit],sort=True,join='outer')
+    else:
+        df_supply_allocation_combined=df_supply_allocation
+
+    return df_supply_allocation_combined
+
+@write_log_time_spent
+def consolidate_allocated_pcba_and_kinaxis(df_supply_allocation_combined,df_supply_kinaxis,oh_date):
+    """
+    Remove same TAN from Kinaxis supply and replace with the allocated pcba supply.
+    """
+    # Change past to oh_date and remove 'ORG'
+    df_supply_allocation_combined.reset_index(inplace=True)
+    df_supply_allocation_combined.drop('ORG',axis=1,inplace=True)
+    df_supply_allocation_combined.rename(columns={'Past':oh_date},inplace=True)
+    df_supply_allocation_combined.set_index('TAN',inplace=True)
+
+    # remove the same TAN from kinaxis file
+    df_supply_kinaxis.reset_index(inplace=True)
+    df_supply_kinaxis=df_supply_kinaxis[~df_supply_kinaxis.TAN.isin(df_supply_allocation_combined.index)].copy()
+    df_supply_kinaxis.set_index('TAN', inplace=True)
+
+    # concat both supply files
+    df_supply=pd.concat([df_supply_kinaxis,df_supply_allocation_combined],sort=True)
+
+    df_supply.to_excel('test4.xlsx')
+
+    return df_supply
+
+
+
+
 
 def limit_3a4_org_and_bu(df_3a4,org_list,bu_list):
     """
@@ -476,6 +571,11 @@ def basic_data_processing_3a4(df_3a4):
                                                 df_3a4.LT_TARGET_FCD,
                                                 df_3a4.ORIGINAL_FCD_NBD_DATE))
 
+    df_3a4.loc[:, 'min_date'] = np.where(df_3a4.min_date.isnull(),
+                                         pd.Timestamp.today().date() + pd.Timedelta(30, 'd'),
+                                         df_3a4.min_date)
+
+
     #更改列名
     df_3a4.rename(columns={'CTB_STATUS':'CTB_STATUS(CTB_UI)'},inplace=True)
 
@@ -517,8 +617,8 @@ def add_allocation_result_to_3a4(df_3a4,blg_with_allocation):
         lambda x: blg_with_allocation[x][1] if x in blg_with_allocation.keys() else None)
     df_3a4.loc[:, 'tan_qty_wo_supply'] = df_3a4.po_pn.map(
         lambda x: blg_with_allocation[x][2] if x in blg_with_allocation.keys() else None)
-    df_3a4.loc[:, 'shortage_to_min_date'] = df_3a4.po_pn.map(
-        lambda x: blg_with_allocation[x][3] if x in blg_with_allocation.keys() else None)
+    #df_3a4.loc[:, 'shortage_to_min_date'] = df_3a4.po_pn.map(  # currently do not need below
+    #    lambda x: blg_with_allocation[x][3] if x in blg_with_allocation.keys() else None)
 
     #df_3a4.OPTION_NUMBER = df_3a4.OPTION_NUMBER.astype(int)
 
@@ -527,34 +627,47 @@ def add_allocation_result_to_3a4(df_3a4,blg_with_allocation):
 @write_log_time_spent
 def calculate_earliest_packable_date(df_3a4):
     """
-    Calculate an earliest allowed packout date based on if order is scheduled, and LT_target_FCD,target_SSD. This logic
-    need to align with Addressable logic.
-    :param df_3a4:
-    :return:
+    Calculate an earliest allowed packout date. By default it's based on CRSD.
     """
     packable_date_target_fcd=df_3a4.LT_TARGET_FCD - pd.Timedelta(addressable_window['LT_TARGET_FCD'],'d')
     packable_date_target_ssd = df_3a4.TARGET_SSD - pd.Timedelta(addressable_window['TARGET_SSD'], 'd')
+
     packable_date_14=pd.Timestamp.today().date() + pd.Timedelta(14,'d')
+    packable_date_30 = pd.Timestamp.today().date() + pd.Timedelta(30, 'd')
     packable_date_180 = pd.Timestamp.today().date() + pd.Timedelta(180, 'd')
 
+
     df_3a4.loc[:,'earliest_packable_date']=np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
-                                                           packable_date_14,
+                                                           packable_date_30,
                                                            np.where(packable_date_target_fcd>packable_date_target_ssd,
                                                                     packable_date_target_ssd,
                                                                     packable_date_target_fcd)
                                                            )
-    # if order WITH mfg_hold and earliest packable date within 180 days, further push out to 8days from today
-    df_3a4.loc[:, 'earliest_packable_date'] = np.where((df_3a4.MFG_HOLD=='Y') & (df_3a4.earliest_packable_date<packable_date_180),
-                                                       packable_date_180,
+    df_3a4.loc[:, 'earliest_packable_date_factor'] = np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
+                                                           'Unscheduled',
+                                                           'Addressable window'
+                                                           )
+    # if order WITH mfg_hold ensure it's packable_date_30 days out
+    df_3a4.loc[:, 'earliest_packable_date'] = np.where((df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD') & (df_3a4.earliest_packable_date<packable_date_30),
+                                                       packable_date_30,
                                                        df_3a4.earliest_packable_date
                                                        )
+    df_3a4.loc[:, 'earliest_packable_date_factor'] = np.where((df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD') & (df_3a4.earliest_packable_date==packable_date_30),
+                                                               'MFG_HOLD',
+                                                               df_3a4.earliest_packable_date_factor
+                                                               )
 
     # further update for exceptional issues - push out 2 weeks (e.g. config issue)
     df_3a4.loc[:, 'earliest_packable_date']=np.where(df_3a4.EXCEPTION_NAME.notnull(),
-                                                     np.where(df_3a4.earliest_packable_date>packable_date_14,
-                                                            df_3a4.earliest_packable_date,
-                                                            packable_date_14),
+                                                     np.where(df_3a4.earliest_packable_date<packable_date_14,
+                                                              packable_date_14,
+                                                            df_3a4.earliest_packable_date),
                                                      df_3a4.earliest_packable_date)
+    df_3a4.loc[:, 'earliest_packable_date_factor'] = np.where(df_3a4.EXCEPTION_NAME.notnull(),
+                                                             np.where(df_3a4.earliest_packable_date==packable_date_14,
+                                                                      'EXCEPTION',
+                                                                    df_3a4.earliest_packable_date_factor),
+                                                            df_3a4.earliest_packable_date_factor)
 
     return df_3a4
 
@@ -621,9 +734,12 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
     today = pd.Timestamp.now().date()
 
     # define the supply cut off date
-    if cut_off=='qend':
+    if cut_off=='QEND':
         supply_cut_off = qend - pd.Timedelta(FLT, 'd') # Thur of wk13
         packable_cut_off=qend - pd.Timedelta(1, 'd') # Sat of wk13
+    elif cut_off=='ITF':
+        supply_cut_off = today + pd.Timedelta(180,'d') # 180days
+        packable_cut_off = supply_cut_off # same as above since it's too far out
     else:
         today_name = pd.Timestamp.today().day_name()
         offset_wk=int(cut_off[-1])
@@ -644,23 +760,37 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
             offset = 0 + offset_wk * 7
 
         supply_cut_off=today+pd.Timedelta(offset-FLT,'d') # Thursday of the cutoff week
-        packable_cut_off=today+pd.Timedelta(offset-1,'d') # Satday of the cutoff week
+        packable_cut_off=today+pd.Timedelta(offset-1,'d') # Saturday of the cutoff week
 
     # update in 3a4 if supply impact cut_off week build
-    impact_rev='build_impact_'+cut_off
-    impact_qty='build_shortage_'+cut_off
+    impact_factor_col='impact_factor_'+cut_off
+    impact_rev_col='build_gap_dollar_'+cut_off
+    impact_qty_col='build_gap_qty_'+cut_off
 
     # 添加rev impact 列（po unstaged revenue)
-    df_3a4.loc[:,impact_rev]=np.where(df_3a4.earliest_packable_date<=packable_cut_off,
-                                        np.where(df_3a4.tan_supply_ready_date>supply_cut_off,
-                                                df_3a4.C_UNSTAGED_DOLLARS,
-                                                None),
-                                        None)
+    # NOTE: For order scheduled and CRSD within cut_off + 30 days, if ctb not within cut off, then specified as build impact.
+    #       The logic is more aggressive than the addressable logic which is more based on LT_TARGET_FCD rather than CRSD.
+    df_3a4.loc[:, impact_rev_col] = np.where(pd.notnull(df_3a4.CUSTOMER_REQUESTED_SHIP_DATE),
+                                         np.where(df_3a4.CUSTOMER_REQUESTED_SHIP_DATE<=packable_cut_off+pd.Timedelta(30,'d'),
+                                                    np.where(df_3a4.po_ctb>packable_cut_off,
+                                                             df_3a4.C_UNSTAGED_DOLLARS,
+                                                             None),
+                                                  None),
+                                         None)
+    # 添加label
+    df_3a4.loc[:, impact_factor_col] = np.where(df_3a4[impact_rev_col].notnull(),
+                                         np.where(df_3a4.po_ctb>df_3a4.earliest_packable_date,
+                                                  df_3a4.BOM_PN,
+                                                  np.where(df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD',
+                                                           'MFG_HOLD',
+                                                           'GIMS/Config')),
+                                         None)
+
 
     # 添加数量列(shortage)
     dfx = df_3a4[(df_3a4.earliest_packable_date<=packable_cut_off) &
                  (df_3a4.po_pn.isin(blg_with_allocation.keys())) &
-                 (df_3a4[impact_rev].notnull())]
+                 (df_3a4[impact_rev_col].notnull())]
 
     for row in dfx.iterrows():
         po_pn = row[1].po_pn
@@ -670,11 +800,11 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
             if pd.to_datetime(a[0]) > supply_cut_off:  # 如果allocation晚于cut off date, 分配的数量加总到总的po shortage qty上
                 shortage_qty += a[1]
 
-        df_3a4.loc[row[0], impact_qty] = shortage_qty
+        df_3a4.loc[row[0], impact_qty_col] = shortage_qty
 
     # create the gating pn col and indidate whether is top gating or non-top gating
-    gating_col_name = 'gating_build_' + cut_off
-    df_3a4.loc[:,gating_col_name]=np.where(df_3a4[impact_rev].notnull(),# use notnull instead of >0 due to non-rev order exist
+    gating_col_name = 'top_nontop_gating_' + cut_off
+    df_3a4.loc[:,gating_col_name]=np.where(df_3a4[impact_rev_col].notnull(),# use notnull instead of >0 due to non-rev order exist
                                                     np.where(df_3a4.tan_supply_ready_date==df_3a4.po_supply_ready_date,
                                                              'Top-gating',
                                                              'Non top-gating'),
@@ -697,22 +827,23 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
         df_3a4[gating_col_name])
 
     # add the col to the list
-    output_col.append(impact_rev)
-    output_col.append(impact_qty)
+    output_col.append(impact_factor_col)
+    output_col.append(impact_rev_col)
+    output_col.append(impact_qty_col)
     output_col.append(gating_col_name)
 
     # 制作汇总数据表 - 不考虑'BUSINESS_UNIT','PRODUCT_FAMILY'，后面处理后加入
-    df_impact_rev_summary = df_3a4[(df_3a4[gating_col_name].notnull())].pivot_table(index=['ORGANIZATION_CODE', 'BOM_PN'],
+    df_impact_rev_summary = df_3a4[(df_3a4[impact_factor_col].notnull())].pivot_table(index=['ORGANIZATION_CODE', impact_factor_col],
                                                                                     columns=gating_col_name,
-                                                                                    values=impact_rev,
+                                                                                    values=impact_rev_col,
                                                                                     aggfunc=sum)
     df_impact_rev_summary.loc[:, 'Total'] = df_impact_rev_summary.sum(axis=1)
     df_impact_rev_summary = df_impact_rev_summary.applymap(lambda x: round(x / 1000000, 1))
 
-    df_impact_qty_summary = df_3a4[(df_3a4[gating_col_name].notnull())].pivot_table(
-                                                                                    index=['ORGANIZATION_CODE', 'BOM_PN'],
+    df_impact_qty_summary = df_3a4[(df_3a4[impact_factor_col].notnull())].pivot_table(
+                                                                                    index=['ORGANIZATION_CODE', impact_factor_col],
                                                                                     columns=gating_col_name,
-                                                                                    values=impact_qty,
+                                                                                    values=impact_qty_col,
                                                                                     aggfunc=sum)
     df_impact_qty_summary.loc[:, 'Total'] = df_impact_qty_summary.sum(axis=1)
 
@@ -720,17 +851,17 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
     df_build_impact_summary=pd.merge(df_impact_rev_summary,df_impact_qty_summary,left_index=True,right_index=True,
                                      sort=False,suffixes=('_x','_y'))
 
-    df_build_impact_summary.rename(columns={'Non top-gating_x':'Rev impact (non-gating)',
-                                            'Top-gating_x':'Rev impact (top-gating)',
+    df_build_impact_summary.rename(columns={'Non top-gating_x':'Rev impact (2nd-gating)',
+                                            'Top-gating_x':'Rev impact (1st-gating)',
                                             'Total_x':'Rev impact (total)',
-                                            'Non top-gating_y':'Short qty (non-gating)',
-                                            'Top-gating_y':'Short qty (top-gating)',
+                                            'Non top-gating_y':'Short qty (2nd-gating)',
+                                            'Top-gating_y':'Short qty (1st-gating)',
                                             'Total_y':'Short qty (total)'},
                                    inplace=True)
 
     # 把BU/PF信息加入summary (针对重复的org_PN (due to reporting to different BU/PF),对BU/PF做相应的汇总)
     df_build_impact_summary.reset_index(inplace=True)
-    df_build_impact_summary.loc[:,'org_pn']=df_build_impact_summary.ORGANIZATION_CODE + '_' + df_build_impact_summary.BOM_PN
+    df_build_impact_summary.loc[:,'org_pn']=df_build_impact_summary.ORGANIZATION_CODE + '_' + df_build_impact_summary[impact_factor_col]
 
     df_3a4.loc[:,'org_pn']=df_3a4.ORGANIZATION_CODE + '_' + df_3a4.BOM_PN
     dfx=df_3a4[df_3a4.org_pn.isin(df_build_impact_summary.org_pn.unique())][['org_pn','BUSINESS_UNIT','PRODUCT_FAMILY']]
@@ -757,8 +888,8 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
                 pf=pf+'/'+pf_new
         org_pn_dic[org_pn] = [bu, pf]
 
-    df_build_impact_summary.loc[:,'BUSINESS_UNIT']=df_build_impact_summary.org_pn.map(lambda x: org_pn_dic[x][0])
-    df_build_impact_summary.loc[:, 'PRODUCT_FAMILY'] = df_build_impact_summary.org_pn.map(lambda x: org_pn_dic[x][1])
+    df_build_impact_summary.loc[:,'BUSINESS_UNIT']=df_build_impact_summary.org_pn.map(lambda x: org_pn_dic[x][0] if x in org_pn_dic.keys() else None)
+    df_build_impact_summary.loc[:, 'PRODUCT_FAMILY'] = df_build_impact_summary.org_pn.map(lambda x: org_pn_dic[x][1] if x in org_pn_dic.keys() else None)
 
     df_build_impact_summary.drop('org_pn',axis=1,inplace=True)
     df_build_impact_summary.loc[:,'Recovery date']=None
@@ -775,9 +906,9 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
 
     #TODO: should use org_pn as merging key instead - currently only for single site so it's OK
     df_supply_x=df_supply.iloc[:,ind:]
-    df_build_impact_summary=pd.merge(df_build_impact_summary,df_supply_x,left_on='BOM_PN',right_on='TAN',how='left')
+    df_build_impact_summary=pd.merge(df_build_impact_summary,df_supply_x,left_on=impact_factor_col,right_on='TAN',how='left')
 
-    df_build_impact_summary.set_index(['ORGANIZATION_CODE', 'BOM_PN', 'BUSINESS_UNIT', 'PRODUCT_FAMILY'], inplace=True)
+    df_build_impact_summary.set_index(['ORGANIZATION_CODE', impact_factor_col, 'BUSINESS_UNIT', 'PRODUCT_FAMILY'], inplace=True)
     df_build_impact_summary.sort_values('Rev impact (total)', ascending=False, inplace=True)
 
     return df_3a4,df_build_impact_summary,output_col
@@ -2064,9 +2195,8 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
 
     # make build impact summaries
     df_3a4,build_impact_summary_wk0,output_col=make_summary_build_impact(df_3a4, df_supply,output_col, qend,blg_with_allocation,FLT,cut_off='wk0')
-    #df_3a4,build_impact_summary_wk1,output_col = make_summary_build_impact(df_3a4, df_supply,output_col,qend,blg_with_allocation,cut_off='wk1')
-    #df_3a4,build_impact_summary_wk2,output_col = make_summary_build_impact(df_3a4, df_supply,output_col,qend,blg_with_allocation,cut_off='wk2')
-    df_3a4, build_impact_qend,output_col = make_summary_build_impact(df_3a4, df_supply,output_col,qend,blg_with_allocation,FLT,cut_off='qend')
+    df_3a4, build_impact_qend,output_col = make_summary_build_impact(df_3a4, df_supply,output_col,qend,blg_with_allocation,FLT,cut_off='QEND')
+    #df_3a4, build_impact_itf, output_col = make_summary_build_impact(df_3a4, df_supply, output_col, qend,blg_with_allocation, FLT, cut_off='ITF')
 
     # output the file
     data_to_write={
@@ -2079,6 +2209,7 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
                     #'build_impact_wk1':build_impact_summary_wk1,
                     #'build_impact_wk2':build_impact_summary_wk2,
                    'build_impact_qend': build_impact_qend,
+                    #'build_impact_itf': build_impact_itf,
                     #'shortage_impact(vs FCD)':df_shortage_impact_fcd,
                    # 'shortage_qty(vs FCD)':df_shortage_qty_fcd,
                    #'shortage_impact(vs LT target)': df_shortage_impact_lt_target_fcd,
@@ -2147,7 +2278,7 @@ def initial_process_kinaxis_supply(df_supply_kinaxis):
     df_supply_kinaxis = df_supply_kinaxis[df_supply_kinaxis.Total > 0].copy()
     df_supply_kinaxis.drop('Total', axis=1, inplace=True)
 
-    return df_supply_kinaxis
+    return df_supply_kinaxis,oh_date.date()
 
 @write_log_time_spent
 def exclude_pn_no_need_to_consider_from_kinaxis_supply(df_supply_kinaxis,class_code_exclusion):
@@ -2232,11 +2363,11 @@ def process_kinaxis_supply(df_supply_kinaxis,class_code_exclusion):
     Read supply data, CT2R (for CM collected data), and exceptional backlog (input input), and processed into the
     final format after exclude the packaging and label class codes. Also save the Kinaxis file with org in filename.
     """
-    df_supply_kinaxis=initial_process_kinaxis_supply(df_supply_kinaxis)
+    df_supply_kinaxis,oh_date=initial_process_kinaxis_supply(df_supply_kinaxis)
     df_supply_kinaxis=exclude_pn_no_need_to_consider_from_kinaxis_supply(df_supply_kinaxis, class_code_exclusion)
     df_supply_kinaxis=change_supply_to_versionless_and_addup_kinaxis_supply(df_supply_kinaxis,pn_col='TAN')
 
-    return df_supply_kinaxis
+    return df_supply_kinaxis,oh_date
 
 
 

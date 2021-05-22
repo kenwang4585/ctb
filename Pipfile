@@ -22,6 +22,9 @@ xlsxwriter = "*"
 gunicorn = "*"
 vaex = "*"
 smartsheet-python-sdk = "*"
+pymysql = "*"
+flask-mysqldb = "*"
+importlib-metadata = "==1.7.0"
 
 [requires]
 python_version = "3.7"

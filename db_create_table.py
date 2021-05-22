@@ -1,10 +1,9 @@
-from flask_settings import *
+from flask_settings import db
 from sqlalchemy import create_engine
-from setting import db_uri
 import os
 
 def create_table():
-    engine = create_engine(db_uri)
+    engine = create_engine(os.getenv('ENGINE'))
     print('Existing tables:',engine.table_names())
 
     db.create_all()

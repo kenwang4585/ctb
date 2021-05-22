@@ -26,13 +26,17 @@
     		<tr align="center">
                 <td width="5%"></td>
                 <td width='30%' align="left">
-                        <strong>Upload 3A4 backlog file (.csv):</strong>
-                        {{ form.file_3a4 }}
-                            <br><br><br>
+                        <b>3A4 backlog (downloaded from UOV via kw_ctb):</b>
+                            {{ form.file_3a4 }}
+                            <br><br>
 
-                        <strong>Upload supply file (.xlsx):</strong>
-                        {{ form.file_supply }}
-                            <br><br><br>
+                        <b>Material supply (downloaded from Kinaxis):</b>
+                            {{ form.file_kinaxis_supply }}
+                            <br><br>
+
+                        <b> (Optional) PCBA supply (downloaded from PCBA allocation tool)</b>
+                            {{ form.file_allocation_supply }}
+
                 </td>
                 <td width="10%">
                 </td>
@@ -40,10 +44,10 @@
                 <td width="50%" align="left">
                     <br>
                     <div class="form-group">
-                        <strong>{{ form.org.label }}</strong><br>{{ form.org (class='form-control') }}<br>
-                        <strong>{{ form.bu.label }}</strong><br>{{ form.bu (class='form-control')}}<br>
-                        <strong>{{ form.class_code_exclusion.label }}</strong><br>{{ form.class_code_exclusion (class='form-control')}}<br>
-                        <strong>{{ form.description.label }}</strong><br>{{ form.description  (class='form-control')}}<br>
+                        <b>{{ form.org.label }}</b><br>{{ form.org (class='form-control') }}<br>
+                        <b>{{ form.bu.label }}</b><br>{{ form.bu (class='form-control')}}<br>
+                        <b>{{ form.class_code_exclusion.label }}</b><br>{{ form.class_code_exclusion (class='form-control')}}<br>
+                        <b>{{ form.description.label }}</b><br>{{ form.description  (class='form-control')}}<br>
                     </div>
                 </td>
                 <td width="5%"></td>

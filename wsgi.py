@@ -69,6 +69,7 @@ def ctb_run():
         login_name = 'unknown'
 
     if login_user not in allowed_user:
+        add_log_summary(user=login_user, location='Home-RUN', user_action='Visit-trying', summary='')
         raise ValueError
 
     if login_user not in ['kwang2','unknown']:
@@ -99,16 +100,19 @@ def ctb_run():
         add_log_details(msg=log_msg)
 
         f_3a4 = form.file_3a4.data
-        f_supply= form.file_supply.data
+        f_kinaxis_supply= form.file_kinaxis_supply.data
+        f_allocation_supply = form.file_allocation_supply.data
 
         # 存储文件 - will save again with Org name in file name later
         #file_path_3a4 = os.path.join(app.config['UPLOAD_PATH'],'3a4.csv')
         #file_path_supply = os.path.join(app.config['UPLOAD_PATH'],'supply.xlsx')
         file_path_3a4 = os.path.join(base_dir_upload, login_user + '_'+ secure_filename(f_3a4.filename))
-        file_path_kinaxis_supply = os.path.join(base_dir_upload, login_user + '_'+ secure_filename(f_supply.filename))
-
+        file_path_kinaxis_supply = os.path.join(base_dir_upload, login_user + '_'+ secure_filename(f_kinaxis_supply.filename))
         f_3a4.save(file_path_3a4)
-        f_supply.save(file_path_kinaxis_supply)
+        f_kinaxis_supply.save(file_path_kinaxis_supply)
+        if f_allocation_supply!=None:
+            file_path_allocation_supply = os.path.join(base_dir_upload,login_user + '_' + secure_filename(f_allocation_supply.filename))
+            f_allocation_supply.save(file_path_allocation_supply)
 
         # 判断并定义ranking_col
         ranking_col = ranking_col_cust
@@ -128,17 +132,35 @@ def ctb_run():
                 flash(error_msg, 'warning')
                 return redirect(url_for('ctb_run', _external=True, _scheme='http', viewarg1=1))
 
+            # 处理 kinaxis supply data (oh_date used in allocation supply OH to use same date)
+            df_supply_kinaxis,oh_date = process_kinaxis_supply(df_supply_kinaxis, class_code_exclusion)
+
+            # read pcba allocation supply and check format
+            # TODO: update inside of read_pcba_allocation.... multi-sourcing case with multi-allocation files
+            if f_allocation_supply!=None:
+                df_supply_allocation, df_supply_allocation_transit, df_supply_tan_transit_time, error_msg=read_pcba_allocation_supply_and_check_format(file_path_allocation_supply)
+                if error_msg != '':
+                    add_log_details(msg=error_msg)
+                    flash(error_msg, 'warning')
+                    return redirect(url_for('ctb_run', _external=True, _scheme='http', viewarg1=1))
+
+                # TODO: process supply and update into kinaxis supply file (Replace by TAN)
+                df_supply_allocation_combined=consolidate_pcba_allocation_supply(df_supply_allocation, df_supply_tan_transit_time,
+                                               df_supply_allocation_transit, org_list)
+
+                # concat allocation PCBA to Kinaxis (remove same TAN from kinaxis file)
+                df_supply=consolidate_allocated_pcba_and_kinaxis(df_supply_allocation_combined, df_supply_kinaxis, oh_date)
+            else:
+                df_supply=df_supply_kinaxis
+
             # 选择相关的org/bu
             df_3a4 = limit_3a4_org_and_bu(df_3a4,org_list,bu_list)
 
             # 读取Exceptional PO from smartsheet and add in 3a4
             df_3a4 = read_and_add_exception_po_to_3a4(df_3a4)
 
-            # 处理 kinaxis supply data
-            df_supply_kinaxis = process_kinaxis_supply(df_supply_kinaxis,class_code_exclusion)
-
             # Rank backlog，allocate supply, and make the summaries
-            output_filename=main_program_all(df_3a4, org_list,bu_list,description, ranking_col, df_supply_kinaxis, qend_list, output_col,login_user)
+            output_filename=main_program_all(df_3a4, org_list,bu_list,description, ranking_col, df_supply, qend_list, output_col,login_user)
             log_msg='CTB file created:{}! You can download accordingly.'.format(output_filename)
             flash(log_msg, 'success')
             add_log_details(msg=log_msg)
@@ -156,13 +178,13 @@ def ctb_run():
 
             # clear memory
             try:
-                del df_supply_kinaxis, df_3a4
+                del df_3a4, df_supply_kinaxis, df_supply, df_supply_allocation_combined
                 gc.collect()
             except:
                 pass
         except Exception as e:
             try:
-                del df_supply_kinaxis, df_3a4
+                del df_3a4, df_supply_kinaxis, df_supply, df_supply_allocation_combined
                 gc.collect()
             except:
                 pass
@@ -239,8 +261,7 @@ def download_file_trash(filename):
     login_user = request.headers.get('Oidc-Claim-Sub')
 
     if login_user != 'unknown':
-        add_log_summary(user=login_user, location='Result', user_action='Download file',
-                 summary=filename)
+        add_log_summary(user=login_user, location='Result', user_action='Download file', summary=filename)
 
     return send_from_directory(f_path, filename=filename, as_attachment=True)
 
@@ -250,8 +271,7 @@ def download_file_output(filename):
     print(f_path)
     login_user = request.headers.get('Oidc-Claim-Sub')
     if login_user != 'unknown':
-        add_log_summary(user=login_user, location='Result', user_action='Download file',
-                 summary=filename)
+        add_log_summary(user=login_user, location='Result', user_action='Download file', summary=filename)
     return send_from_directory(f_path, filename=filename, as_attachment=True)
 
 @app.route('/u/<filename>',methods=['GET'])
@@ -259,8 +279,7 @@ def download_file_upload(filename):
     f_path=base_dir_upload
     login_user = request.headers.get('Oidc-Claim-Sub')
     if login_user != 'unknown':
-        add_log_summary(user=login_user, location='Result', user_action='Download file',
-                 summary=filename)
+        add_log_summary(user=login_user, location='Result', user_action='Download file',summary=filename)
     return send_from_directory(f_path, filename=filename, as_attachment=True)
 
 @app.route('/l/<filename>',methods=['GET'])
@@ -269,8 +288,7 @@ def download_file_logs(filename):
     print(f_path)
     login_user = request.headers.get('Oidc-Claim-Sub')
     if login_user != None:
-        add_log_summary(user=login_user, location='Result', user_action='Download file',
-                 summary=filename)
+        add_log_summary(user=login_user, location='Result', user_action='Download file',summary=filename)
     return send_from_directory(f_path, filename=filename, as_attachment=True)
 
 
@@ -300,7 +318,7 @@ def ctb_admin():
     df_logs=get_file_info_on_drive(base_dir_logs,keep_hours=10000)
 
     # read logs
-    df_log_detail = read_table('user_log')
+    df_log_detail = read_table('ctb_user_log')
     df_log_detail.sort_values(by=['DATE','TIME'],ascending=False,inplace=True)
 
     if form.validate_on_submit():

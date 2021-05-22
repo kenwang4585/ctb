@@ -9,7 +9,7 @@ def add_log_summary(user='', location='', user_action='',summary=''):
     Add the user log to db
     '''
 
-    log = UserLog(USER_NAME=user,
+    log = CtbUserLog(USER_NAME=user,
                     DATE=pd.Timestamp.now().date(),
                     TIME=pd.Timestamp.now().strftime('%H:%M:%S'),
                     LOCATION=location,
