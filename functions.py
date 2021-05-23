@@ -263,8 +263,8 @@ def calculate_po_ctb_in_3a4(df_3a4):
     # using a date instead of ITF for resample purpose
     df_3a4.loc[:, 'po_ctb'] = np.where(df_3a4.po_supply_ready_date.isnull(),
                                        date_180,
-                                       np.where(df_3a4.earliest_packable_date>df_3a4.po_supply_ready_date + pd.Timedelta(FLT, 'd'),
-                                                df_3a4.earliest_packable_date,
+                                       np.where(df_3a4.earliest_allowed_pack_date>df_3a4.po_supply_ready_date + pd.Timedelta(FLT, 'd'),
+                                                df_3a4.earliest_allowed_pack_date,
                                                 df_3a4.po_supply_ready_date + pd.Timedelta(FLT, 'd'))
                                         )
 
@@ -274,9 +274,12 @@ def calculate_po_ctb_in_3a4(df_3a4):
                                        df_3a4.po_ctb)
 
     # add ctb comments
+    today_name = pd.Timestamp.today().day_name()
     df_3a4.loc[:,'ctb_comment']=np.where(df_3a4.po_ctb==today,
-                                         'Ready to build',
-                                         np.where(df_3a4.po_ctb>df_3a4.earliest_packable_date,
+                                         np.where(today_name=='Sunday',
+                                                  'GO - count next week',
+                                                    'GO'),
+                                         np.where(df_3a4.po_ctb>df_3a4.earliest_allowed_pack_date,
                                                   'Following supply',
                                                   np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
                                                             'Unscheduled - CTB 4wk out',
@@ -625,7 +628,7 @@ def add_allocation_result_to_3a4(df_3a4,blg_with_allocation):
     return df_3a4
 
 @write_log_time_spent
-def calculate_earliest_packable_date(df_3a4):
+def calculate_earliest_allowed_pack_date(df_3a4):
     """
     Calculate an earliest allowed packout date. By default it's based on CRSD.
     """
@@ -637,37 +640,37 @@ def calculate_earliest_packable_date(df_3a4):
     packable_date_180 = pd.Timestamp.today().date() + pd.Timedelta(180, 'd')
 
 
-    df_3a4.loc[:,'earliest_packable_date']=np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
+    df_3a4.loc[:,'earliest_allowed_pack_date']=np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
                                                            packable_date_30,
                                                            np.where(packable_date_target_fcd>packable_date_target_ssd,
                                                                     packable_date_target_ssd,
                                                                     packable_date_target_fcd)
                                                            )
-    df_3a4.loc[:, 'earliest_packable_date_factor'] = np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
+    df_3a4.loc[:, 'earliest_allowed_pack_date_factor'] = np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
                                                            'Unscheduled',
                                                            'Addressable window'
                                                            )
     # if order WITH mfg_hold ensure it's packable_date_30 days out
-    df_3a4.loc[:, 'earliest_packable_date'] = np.where((df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD') & (df_3a4.earliest_packable_date<packable_date_30),
+    df_3a4.loc[:, 'earliest_allowed_pack_date'] = np.where((df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD') & (df_3a4.earliest_allowed_pack_date<packable_date_30),
                                                        packable_date_30,
-                                                       df_3a4.earliest_packable_date
+                                                       df_3a4.earliest_allowed_pack_date
                                                        )
-    df_3a4.loc[:, 'earliest_packable_date_factor'] = np.where((df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD') & (df_3a4.earliest_packable_date==packable_date_30),
+    df_3a4.loc[:, 'earliest_allowed_pack_date_factor'] = np.where((df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD') & (df_3a4.earliest_allowed_pack_date==packable_date_30),
                                                                'MFG_HOLD',
-                                                               df_3a4.earliest_packable_date_factor
+                                                               df_3a4.earliest_allowed_pack_date_factor
                                                                )
 
     # further update for exceptional issues - push out 2 weeks (e.g. config issue)
-    df_3a4.loc[:, 'earliest_packable_date']=np.where(df_3a4.EXCEPTION_NAME.notnull(),
-                                                     np.where(df_3a4.earliest_packable_date<packable_date_14,
+    df_3a4.loc[:, 'earliest_allowed_pack_date']=np.where(df_3a4.EXCEPTION_NAME.notnull(),
+                                                     np.where(df_3a4.earliest_allowed_pack_date<packable_date_14,
                                                               packable_date_14,
-                                                            df_3a4.earliest_packable_date),
-                                                     df_3a4.earliest_packable_date)
-    df_3a4.loc[:, 'earliest_packable_date_factor'] = np.where(df_3a4.EXCEPTION_NAME.notnull(),
-                                                             np.where(df_3a4.earliest_packable_date==packable_date_14,
+                                                            df_3a4.earliest_allowed_pack_date),
+                                                     df_3a4.earliest_allowed_pack_date)
+    df_3a4.loc[:, 'earliest_allowed_pack_date_factor'] = np.where(df_3a4.EXCEPTION_NAME.notnull(),
+                                                             np.where(df_3a4.earliest_allowed_pack_date==packable_date_14,
                                                                       'EXCEPTION',
-                                                                    df_3a4.earliest_packable_date_factor),
-                                                            df_3a4.earliest_packable_date_factor)
+                                                                    df_3a4.earliest_allowed_pack_date_factor),
+                                                            df_3a4.earliest_allowed_pack_date_factor)
 
     return df_3a4
 
@@ -721,14 +724,9 @@ def redefine_addressable_flag_main_pip_version(df_3a4):
 def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocation,FLT,cut_off='wk0'):
     """
     Calculate and add extra col to indicate build impact by the cutoff week (wk0 as current week). The backlog base is
-    based on the earliest_packable_date by Saterday of the specified week. Cut off date for material is by Thursday for
+    based on the earliest_allowed_pack_date by Saturday of the specified week. Cut off date for material is by Thursday for
     that week.
     Revenue is looking at PO level un-staged revenue.
-    :param df_3a4:
-    :param qend: qend date predefined in setting
-    :param cut_off: cut off week - wk0, wk1, wk2, etc.
-    :param output_col:
-    :return:
     """
     # identify Sunday date for current week impact
     today = pd.Timestamp.now().date()
@@ -736,10 +734,10 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
     # define the supply cut off date
     if cut_off=='QEND':
         supply_cut_off = qend - pd.Timedelta(FLT, 'd') # Thur of wk13
-        packable_cut_off=qend - pd.Timedelta(1, 'd') # Sat of wk13
+        pack_cut_off=qend - pd.Timedelta(1, 'd') # Sat of wk13
     elif cut_off=='ITF':
         supply_cut_off = today + pd.Timedelta(180,'d') # 180days
-        packable_cut_off = supply_cut_off # same as above since it's too far out
+        pack_cut_off = supply_cut_off # same as above since it's too far out
     else:
         today_name = pd.Timestamp.today().day_name()
         offset_wk=int(cut_off[-1])
@@ -760,37 +758,51 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
             offset = 0 + offset_wk * 7
 
         supply_cut_off=today+pd.Timedelta(offset-FLT,'d') # Thursday of the cutoff week
-        packable_cut_off=today+pd.Timedelta(offset-1,'d') # Saturday of the cutoff week
+        pack_cut_off=today+pd.Timedelta(offset-1,'d') # Saturday of the cutoff week
 
     # update in 3a4 if supply impact cut_off week build
-    impact_factor_col='impact_factor_'+cut_off
-    impact_rev_col='build_gap_dollar_'+cut_off
-    impact_qty_col='build_gap_qty_'+cut_off
+    impact_factor_col=cut_off + '_impact_factor'
+    #impact_rev_col='build_gap_dollar_'+cut_off
+    impact_qty_col=cut_off + '_short_qty'
 
     # 添加rev impact 列（po unstaged revenue)
-    # NOTE: For order scheduled and CRSD within cut_off + 30 days, if ctb not within cut off, then specified as build impact.
-    #       The logic is more aggressive than the addressable logic which is more based on LT_TARGET_FCD rather than CRSD.
-    df_3a4.loc[:, impact_rev_col] = np.where(pd.notnull(df_3a4.CUSTOMER_REQUESTED_SHIP_DATE),
-                                         np.where(df_3a4.CUSTOMER_REQUESTED_SHIP_DATE<=packable_cut_off+pd.Timedelta(30,'d'),
-                                                    np.where(df_3a4.po_ctb>packable_cut_off,
-                                                             df_3a4.C_UNSTAGED_DOLLARS,
-                                                             None),
-                                                  None),
-                                         None)
-    # 添加label
-    df_3a4.loc[:, impact_factor_col] = np.where(df_3a4[impact_rev_col].notnull(),
-                                         np.where(df_3a4.po_ctb>df_3a4.earliest_packable_date,
-                                                  df_3a4.BOM_PN,
-                                                  np.where(df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD',
-                                                           'MFG_HOLD',
-                                                           'GIMS/Config')),
-                                         None)
+    # NOTE: For order within pack_cut_off + 30 days, if ctb not within pack_cut_off, then specified as build impact.
+    #       The logic is close to the addressable logic.
+    build_window=pack_cut_off+pd.Timedelta(30,'d')
+     # 添加label
+    if cut_off=='wk0':
+        df_3a4.loc[:, impact_factor_col] = np.where(df_3a4.ADDRESSABLE_FLAG.isin(['MFG_HOLD','NOT_ADDRESSABLE','UNSCHEDULED']),
+                                                    df_3a4.ADDRESSABLE_FLAG,
+                                                    np.where(df_3a4.po_ctb<=pack_cut_off,
+                                                             'GO',
+                                                             np.where(df_3a4.EXCEPTION_NAME.notnull(),
+                                                                      'GIMS/Config/etc',
+                                                                      np.where(df_3a4.tan_supply_ready_date>supply_cut_off,
+                                                                                df_3a4.BOM_PN,
+                                                                               None)
+                                                                      )))
+    else:
+        df_3a4.loc[:, impact_factor_col] = np.where(df_3a4.earliest_allowed_pack_date>build_window,
+                                                    'NOT_ADDRESSABLE',
+                                                    np.where(df_3a4.po_ctb<=pack_cut_off,
+                                                             'GO',
+                                                             np.where(df_3a4.po_ctb>df_3a4.earliest_allowed_pack_date,# due to material
+                                                                      df_3a4.BOM_PN,
+                                                                      np.where(df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD',
+                                                                               'MFG_HOLD',
+                                                                               np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
+                                                                                        'Unscheduled',
+                                                                                        np.where(df_3a4.EXCEPTION_NAME.notnull(),
+                                                                                                 'GIMS/Config/etc',
+                                                                                                 'NOT_ADDRESSABLE')))),
+                                                             ))
 
 
     # 添加数量列(shortage)
-    dfx = df_3a4[(df_3a4.earliest_packable_date<=packable_cut_off) &
+    dfx = df_3a4[(df_3a4.earliest_allowed_pack_date<=pack_cut_off) &
                  (df_3a4.po_pn.isin(blg_with_allocation.keys())) &
-                 (df_3a4[impact_rev_col].notnull())]
+                 (~df_3a4[impact_factor_col].isin(['UNSCHEDULED','MFG_HOLD','GIMS/Config/etc','NOT_ADDRESSABLE','GO']))&
+                 (df_3a4[impact_factor_col].notnull())]
 
     for row in dfx.iterrows():
         po_pn = row[1].po_pn
@@ -802,35 +814,43 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
 
         df_3a4.loc[row[0], impact_qty_col] = shortage_qty
 
-    # create the gating pn col and indidate whether is top gating or non-top gating
-    gating_col_name = 'top_nontop_gating_' + cut_off
-    df_3a4.loc[:,gating_col_name]=np.where(df_3a4[impact_rev_col].notnull(),# use notnull instead of >0 due to non-rev order exist
+    # create the gating pn col and indicate whether is top gating or non-top gating
+    gating_col_name = cut_off + '_top_gating'
+    df_3a4.loc[:,gating_col_name]=np.where(df_3a4[impact_factor_col].notnull(),
                                                     np.where(df_3a4.tan_supply_ready_date==df_3a4.po_supply_ready_date,
-                                                             'Top-gating',
-                                                             'Non top-gating'),
+                                                             'YES',
+                                                             'NO'),
                                                      None)
 
-
     # For top gating: when multiple top gating in one PO, remove the rest and keep the first one as top gating.
-    df_top_gating=df_3a4[df_3a4[gating_col_name]=='Top-gating']
+    df_top_gating=df_3a4[df_3a4[gating_col_name]=='YES']
     df_top_gating_duplicated_po_pn=df_top_gating[df_top_gating.duplicated('PO_NUMBER')].po_pn
+    print(df_top_gating_duplicated_po_pn)
     df_3a4.loc[:,gating_col_name]=np.where(df_3a4.po_pn.isin(df_top_gating_duplicated_po_pn),
-                                                         'Non top-gating',
-                                                         df_3a4[gating_col_name])
+                                            np.where(df_3a4[impact_factor_col].isin(['UNSCHEDULED','MFG_HOLD','GIMS/Config/etc','NOT_ADDRESSABLE','GO']),
+                                                     None,
+                                                     'NO'),
+                                            df_3a4[gating_col_name])
 
-    # For both top gating and NON top gating: when same PN in one PO, remove the rest and keep the first one to avoid duplicate on rev
+    # For both top gating and NON top gating: when same PN duplicate in one PO, remove the rest and keep the first one to avoid duplicate on rev
     df_gating = df_3a4[df_3a4[gating_col_name].notnull()] # both top and non top gating
     df_gating_duplicated_po_pn = df_gating[df_gating.duplicated(['PO_NUMBER','BOM_PN'])].po_pn
-    df_3a4.loc[:, gating_col_name] = np.where(
-        df_3a4.po_pn.isin(df_gating_duplicated_po_pn),
-        None,
-        df_3a4[gating_col_name])
+    print(df_gating_duplicated_po_pn)
+    df_3a4.loc[:, gating_col_name] = np.where(df_3a4.po_pn.isin(df_gating_duplicated_po_pn),
+                                                None,
+                                                df_3a4[gating_col_name])
 
     # add the col to the list
     output_col.append(impact_factor_col)
-    output_col.append(impact_rev_col)
+    #output_col.append(impact_rev_col)
     output_col.append(impact_qty_col)
     output_col.append(gating_col_name)
+
+    print(output_col)
+    #print(df_3a4[output_col])
+
+    df_3a4.to_excel('test.xlsx')
+    raise ValueError
 
     # 制作汇总数据表 - 不考虑'BUSINESS_UNIT','PRODUCT_FAMILY'，后面处理后加入
     df_impact_rev_summary = df_3a4[(df_3a4[impact_factor_col].notnull())].pivot_table(index=['ORGANIZATION_CODE', impact_factor_col],
@@ -2078,7 +2098,6 @@ def make_summary_fcd_vs_ctb(df_3a4):
     # sort the data
     dfc.sort_values(['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY'], inplace=True)
 
-    dfc.to_excel('test.xlsx')
     # calculate Cum delta between FCD and CTB
     dfc.fillna(0, inplace=True)
     for row in dfc.itertuples():
@@ -2139,7 +2158,7 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
     df_3a4 = df_3a4[(df_3a4.ADDRESSABLE_FLAG != 'PO_CANCELLED') & (df_3a4.PACKOUT_QUANTITY != 'Packout Completed')].copy()
 
     # calculate the earliest packout date based on LT target fcd
-    df_3a4=calculate_earliest_packable_date(df_3a4)
+    df_3a4=calculate_earliest_allowed_pack_date(df_3a4)
 
     # sort and rank the orders with overall priority (e.g.: ranking_col = ['priority_rank', 'partiak_rank','ss_rev_rank', 'min_date', 'SO_SS', 'PO_NUMBER'])
     df_3a4=ss_ranking_overall_new_december(df_3a4, ss_exceptional_priority, ranking_col,order_col='SO_SS', new_col='ss_overall_rank')
