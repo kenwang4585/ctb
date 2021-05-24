@@ -724,9 +724,9 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
 
     # define the supply cut off date
     if cut_off=='QEND':
-        supply_cut_off = qend - pd.Timedelta(FLT, 'd') # Thur of wk13
+        supply_cut_off = qend - pd.Timedelta(FLT+1, 'd') # Thur of wk13
         pack_cut_off=qend - pd.Timedelta(1, 'd') # Sat of wk13
-    elif cut_off=='ITF':
+    elif cut_off=='ITF': # currently not used
         supply_cut_off = today + pd.Timedelta(180,'d') # 180days
         pack_cut_off = supply_cut_off # same as above since it's too far out
     else:
@@ -748,8 +748,8 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
         elif today_name == 'Sunday':
             offset = 0 + offset_wk * 7
 
-        supply_cut_off=today+pd.Timedelta(offset-FLT,'d') # Thursday of the cutoff week
         pack_cut_off=today+pd.Timedelta(offset-1,'d') # Saturday of the cutoff week
+        supply_cut_off = today + pd.Timedelta(offset - 1 - FLT, 'd')  # Thursday of the cutoff week
 
     # update in 3a4 if supply impact cut_off week build
     impact_factor_col=cut_off + '_impact_factor'
@@ -911,7 +911,7 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
         df_build_impact_summary.loc[:, 'PRODUCT_FAMILY'] = df_build_impact_summary.org_pn.map(lambda x: org_pn_dic[x][1] if x in org_pn_dic.keys() else None)
 
         df_build_impact_summary.drop('org_pn',axis=1,inplace=True)
-        df_build_impact_summary.loc[:,'Recovery date']=None
+        df_build_impact_summary.loc[:,'Future supply']=None
 
         # 把supply (future supply)合并入df_build_impact_summary
         supply_col=pd.to_datetime(df_supply.columns).tolist()
@@ -923,7 +923,7 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
                 #print(supply_cut_off,dt,ind)
                 break
 
-        #TODO: should use org_pn as merging key instead - currently only for single site so it's OK
+         #TODO: should use org_pn as merging key instead - currently only for single site so it's OK
         df_supply_x=df_supply.iloc[:,ind:]
         df_build_impact_summary=pd.merge(df_build_impact_summary,df_supply_x,left_on=impact_factor_col,right_on='TAN',how='left')
 
@@ -1574,26 +1574,33 @@ def make_summary_riso(df_3a4):
     :return:
     """
     dfx=df_3a4.drop_duplicates('SO_SS')
-    df_riso_asis = dfx[dfx['RISO (as is)']=='Yes'].pivot_table(index=['ORGANIZATION_CODE','BUSINESS_UNIT'],
-                            columns='LT_TARGET_FCD',
+    df_riso_asis = dfx[dfx['RISO (as is)']=='Yes'].pivot_table(index=['ORGANIZATION_CODE','BUSINESS_UNIT','PRODUCT_FAMILY'],
+                            columns='RISO (as is)',
                             values='ss_unstg_rev',
                             aggfunc=sum)
 
-    df_riso_asis.loc[:,'RISO']='RISO (as is)'
+    df_riso_asis.rename(columns={'Yes':'RISO (as is)'},inplace=True)
 
-    df_riso_tobe = dfx[(dfx['RISO (to be)'] == 'Yes')].pivot_table(index=['ORGANIZATION_CODE','BUSINESS_UNIT'],
-                                                                       columns='LT_TARGET_FCD',
+    df_riso_tobe = dfx[(dfx['RISO (to be)'] == 'Yes')].pivot_table(index=['ORGANIZATION_CODE','BUSINESS_UNIT','PRODUCT_FAMILY'],
+                                                                       columns='RISO (to be)',
                                                                        values='ss_unstg_rev',
                                                                        aggfunc=sum)
-    df_riso_tobe.loc[:, 'RISO'] = 'RISO (to be)'
+    df_riso_tobe.rename(columns={'Yes':'RISO (to be)'},inplace=True)
 
+    """
     df_riso=pd.concat([df_riso_asis,df_riso_tobe],sort=True)
     df_riso.reset_index(inplace=True)
     df_riso.set_index(['ORGANIZATION_CODE','BUSINESS_UNIT','RISO'],inplace=True)
     df_riso.sort_index(inplace=True)
-
+    
+    
     df_riso=resample_columns_and_agg_pastdue(df_riso,method='W-SAT',agg_col_name='Current week + pastdue',
                                                total_col="Total",total_row=None,convert_num=True)
+    """
+
+    df_riso = pd.merge(df_riso_asis, df_riso_tobe, left_index=True, right_index=True)
+    df_riso.loc[('Total','Toal','Total'),:]=df_riso.sum(axis=0)
+    df_riso=df_riso.applymap(lambda x: round(x/1000000,1))
 
     return df_riso
 
@@ -2207,7 +2214,7 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
     # make summaries
     df_po_ctb=make_summary_build_projection(df_3a4,bu_list)
     df_decommit_improve_summary=make_summary_decommit_vs_improve(df_3a4)
-    #df_riso = make_summary_riso(df_3a4)
+    df_riso = make_summary_riso(df_3a4)
     df_fcd_ctb_summary=make_summary_fcd_vs_ctb(df_3a4)
 
     # make supply/demand summaries:for shortage PN
@@ -2223,7 +2230,7 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
                     'build_projection':df_po_ctb,
                    'agg_fcd_vs_ctb':df_fcd_ctb_summary,
                   'ss_decommit_vs_pullin':df_decommit_improve_summary,
-                   #'riso_status(vs LT target)':df_riso,
+                   'riso_status':df_riso,
                    #'sd_shortage_pn(vs LT target)':df_sd_combined_short,
                    'build_impact_wk0':build_impact_summary_wk0,
                     #'build_impact_wk1':build_impact_summary_wk1,
