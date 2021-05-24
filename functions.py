@@ -274,21 +274,14 @@ def calculate_po_ctb_in_3a4(df_3a4):
                                        df_3a4.po_ctb)
 
     # add ctb comments
-    today_name = pd.Timestamp.today().day_name()
-    df_3a4.loc[:,'ctb_comment']=np.where(df_3a4.po_ctb==today,
-                                         np.where(today_name=='Sunday',
-                                                  'GO - count next week',
-                                                    'GO'),
-                                         np.where(df_3a4.po_ctb>df_3a4.earliest_allowed_pack_date,
-                                                  'Following supply',
-                                                  np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
-                                                            'Unscheduled - CTB 4wk out',
-                                                           np.where(df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD',
-                                                                    'MFG hold - CTB 4wk out',
-                                                                    'Following Target FCD or Exception'))))
+    #today_name = pd.Timestamp.today().day_name()
+    df_3a4.loc[:,'ctb_comment']=np.where(df_3a4.po_ctb>df_3a4.earliest_allowed_pack_date,
+                                                    'Following supply',
+                                                    df_3a4.earliest_allowed_pack_date_factor)
+
 
     df_3a4.loc[:, 'ctb_comment'] = np.where(df_3a4.po_supply_ready_date.isnull(),
-                                            'ITF - no supply recovery',
+                                            'Following supply - ITF',
                                             df_3a4.ctb_comment)
 
     return df_3a4
@@ -482,8 +475,6 @@ def consolidate_allocated_pcba_and_kinaxis(df_supply_allocation_combined,df_supp
     # concat both supply files
     df_supply=pd.concat([df_supply_kinaxis,df_supply_allocation_combined],sort=True)
 
-    df_supply.to_excel('test4.xlsx')
-
     return df_supply
 
 
@@ -632,45 +623,45 @@ def calculate_earliest_allowed_pack_date(df_3a4):
     """
     Calculate an earliest allowed packout date. By default it's based on CRSD.
     """
-    packable_date_target_fcd=df_3a4.LT_TARGET_FCD - pd.Timedelta(addressable_window['LT_TARGET_FCD'],'d')
-    packable_date_target_ssd = df_3a4.TARGET_SSD - pd.Timedelta(addressable_window['TARGET_SSD'], 'd')
+    packable_date_target_fcd=df_3a4.LT_TARGET_FCD - pd.Timedelta(addressable_window,'d')
+    packable_date_fcd=df_3a4.CURRENT_FCD_NBD_DATE - pd.Timedelta(addressable_window,'d')
+    #packable_date_target_ssd = df_3a4.TARGET_SSD - pd.Timedelta(addressable_window['TARGET_SSD'], 'd')
 
     packable_date_14=pd.Timestamp.today().date() + pd.Timedelta(14,'d')
     packable_date_30 = pd.Timestamp.today().date() + pd.Timedelta(30, 'd')
-    packable_date_180 = pd.Timestamp.today().date() + pd.Timedelta(180, 'd')
-
+    #packable_date_180 = pd.Timestamp.today().date() + pd.Timedelta(180, 'd')
 
     df_3a4.loc[:,'earliest_allowed_pack_date']=np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
                                                            packable_date_30,
-                                                           np.where(packable_date_target_fcd>packable_date_target_ssd,
-                                                                    packable_date_target_ssd,
-                                                                    packable_date_target_fcd)
-                                                           )
-    df_3a4.loc[:, 'earliest_allowed_pack_date_factor'] = np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
-                                                           'Unscheduled',
-                                                           'Addressable window'
-                                                           )
+                                                           np.where(packable_date_target_fcd.notnull(),
+                                                                    packable_date_target_fcd,
+                                                                    packable_date_fcd))
+
     # if order WITH mfg_hold ensure it's packable_date_30 days out
     df_3a4.loc[:, 'earliest_allowed_pack_date'] = np.where((df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD') & (df_3a4.earliest_allowed_pack_date<packable_date_30),
                                                        packable_date_30,
                                                        df_3a4.earliest_allowed_pack_date
                                                        )
+
+    df_3a4.loc[:, 'earliest_allowed_pack_date'] = np.where((df_3a4.EXCEPTION_NAME.notnull())&(df_3a4.earliest_allowed_pack_date < packable_date_14),
+                                                            packable_date_14,
+                                                            df_3a4.earliest_allowed_pack_date)
+
     df_3a4.loc[:, 'earliest_allowed_pack_date_factor'] = np.where((df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD') & (df_3a4.earliest_allowed_pack_date==packable_date_30),
                                                                'MFG_HOLD',
-                                                               df_3a4.earliest_allowed_pack_date_factor
-                                                               )
+                                                               None)
 
-    # further update for exceptional issues - push out 2 weeks (e.g. config issue)
-    df_3a4.loc[:, 'earliest_allowed_pack_date']=np.where(df_3a4.EXCEPTION_NAME.notnull(),
-                                                     np.where(df_3a4.earliest_allowed_pack_date<packable_date_14,
-                                                              packable_date_14,
-                                                            df_3a4.earliest_allowed_pack_date),
-                                                     df_3a4.earliest_allowed_pack_date)
-    df_3a4.loc[:, 'earliest_allowed_pack_date_factor'] = np.where(df_3a4.EXCEPTION_NAME.notnull(),
-                                                             np.where(df_3a4.earliest_allowed_pack_date==packable_date_14,
-                                                                      'EXCEPTION',
-                                                                    df_3a4.earliest_allowed_pack_date_factor),
-                                                            df_3a4.earliest_allowed_pack_date_factor)
+    df_3a4.loc[:, 'earliest_allowed_pack_date_factor'] = np.where((df_3a4.ADDRESSABLE_FLAG == 'UNSCHEDULED') & (df_3a4.earliest_allowed_pack_date == packable_date_30),
+                                                                    'UNSCHEDULED',
+                                                                    df_3a4.earliest_allowed_pack_date_factor)
+
+    df_3a4.loc[:, 'earliest_allowed_pack_date_factor'] = np.where((df_3a4.EXCEPTION_NAME.notnull()) & (df_3a4.earliest_allowed_pack_date == packable_date_14),
+                                                                    'EXCEPTION)',
+                                                                    df_3a4.earliest_allowed_pack_date_factor)
+
+    df_3a4.loc[:, 'earliest_allowed_pack_date_factor'] = np.where(df_3a4.earliest_allowed_pack_date_factor.isnull(),
+                                                                   'Target FCD/FCD',
+                                                                   df_3a4.earliest_allowed_pack_date_factor)
 
     return df_3a4
 
@@ -764,12 +755,13 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
     impact_factor_col=cut_off + '_impact_factor'
     #impact_rev_col='build_gap_dollar_'+cut_off
     impact_qty_col=cut_off + '_short_qty'
+    gating_col_name = cut_off + '_top_gating'
 
     # 添加rev impact 列（po unstaged revenue)
     # NOTE: For order within pack_cut_off + 30 days, if ctb not within pack_cut_off, then specified as build impact.
     #       The logic is close to the addressable logic.
     build_window=pack_cut_off+pd.Timedelta(30,'d')
-     # 添加label
+     # 添加label - for wk0 first step strictly follow ['MFG_HOLD','NOT_ADDRESSABLE','UNSCHEDULED'] for consistentcy.
     if cut_off=='wk0':
         df_3a4.loc[:, impact_factor_col] = np.where(df_3a4.ADDRESSABLE_FLAG.isin(['MFG_HOLD','NOT_ADDRESSABLE','UNSCHEDULED']),
                                                     df_3a4.ADDRESSABLE_FLAG,
@@ -777,7 +769,7 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
                                                              'GO',
                                                              np.where(df_3a4.EXCEPTION_NAME.notnull(),
                                                                       'GIMS/Config/etc',
-                                                                      np.where(df_3a4.tan_supply_ready_date>supply_cut_off,
+                                                                      np.where((df_3a4.tan_supply_ready_date.isnull())|(df_3a4.tan_supply_ready_date>supply_cut_off),
                                                                                 df_3a4.BOM_PN,
                                                                                None)
                                                                       )))
@@ -791,19 +783,21 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
                                                                       np.where(df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD',
                                                                                'MFG_HOLD',
                                                                                np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
-                                                                                        'Unscheduled',
+                                                                                        'UNSCHEDULED',
                                                                                         np.where(df_3a4.EXCEPTION_NAME.notnull(),
                                                                                                  'GIMS/Config/etc',
                                                                                                  'NOT_ADDRESSABLE')))),
                                                              ))
 
 
-    # 添加数量列(shortage)
+    # 添加数量列(shortage by the supply cut off date)
     dfx = df_3a4[(df_3a4.earliest_allowed_pack_date<=pack_cut_off) &
-                 (df_3a4.po_pn.isin(blg_with_allocation.keys())) &
-                 (~df_3a4[impact_factor_col].isin(['UNSCHEDULED','MFG_HOLD','GIMS/Config/etc','NOT_ADDRESSABLE','GO']))&
-                 (df_3a4[impact_factor_col].notnull())]
+                     (df_3a4.po_pn.isin(blg_with_allocation.keys())) &
+                     (~df_3a4[impact_factor_col].isin(['UNSCHEDULED','MFG_HOLD','GIMS/Config/etc','NOT_ADDRESSABLE','GO']))&
+                     (df_3a4[impact_factor_col].notnull())]
 
+    #df_3a4.loc[:, impact_qty_col] = None # add this in case below does not create this col
+    df_3a4.loc[:,impact_qty_col] = None
     for row in dfx.iterrows():
         po_pn = row[1].po_pn
         allocation = blg_with_allocation[po_pn][0]
@@ -815,17 +809,17 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
         df_3a4.loc[row[0], impact_qty_col] = shortage_qty
 
     # create the gating pn col and indicate whether is top gating or non-top gating
-    gating_col_name = cut_off + '_top_gating'
     df_3a4.loc[:,gating_col_name]=np.where(df_3a4[impact_factor_col].notnull(),
-                                                    np.where(df_3a4.tan_supply_ready_date==df_3a4.po_supply_ready_date,
-                                                             'YES',
-                                                             'NO'),
-                                                     None)
+                                            np.where(df_3a4[impact_factor_col].isin(['UNSCHEDULED','MFG_HOLD','GIMS/Config/etc','NOT_ADDRESSABLE','GO']),
+                                                        'YES',
+                                                        np.where((df_3a4.tan_supply_ready_date.isnull())|(df_3a4.tan_supply_ready_date==df_3a4.po_supply_ready_date),
+                                                                         'YES',
+                                                                         'NO')),
+                                            None)
 
-    # For top gating: when multiple top gating in one PO, remove the rest and keep the first one as top gating.
+   # For top gating: when multiple top gating in one PO, remove the rest and keep the first one as top gating.
     df_top_gating=df_3a4[df_3a4[gating_col_name]=='YES']
     df_top_gating_duplicated_po_pn=df_top_gating[df_top_gating.duplicated('PO_NUMBER')].po_pn
-    print(df_top_gating_duplicated_po_pn)
     df_3a4.loc[:,gating_col_name]=np.where(df_3a4.po_pn.isin(df_top_gating_duplicated_po_pn),
                                             np.where(df_3a4[impact_factor_col].isin(['UNSCHEDULED','MFG_HOLD','GIMS/Config/etc','NOT_ADDRESSABLE','GO']),
                                                      None,
@@ -835,10 +829,20 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
     # For both top gating and NON top gating: when same PN duplicate in one PO, remove the rest and keep the first one to avoid duplicate on rev
     df_gating = df_3a4[df_3a4[gating_col_name].notnull()] # both top and non top gating
     df_gating_duplicated_po_pn = df_gating[df_gating.duplicated(['PO_NUMBER','BOM_PN'])].po_pn
-    print(df_gating_duplicated_po_pn)
     df_3a4.loc[:, gating_col_name] = np.where(df_3a4.po_pn.isin(df_gating_duplicated_po_pn),
                                                 None,
                                                 df_3a4[gating_col_name])
+
+    # Remove "NOT_ADDRESSABLE" from impact_factor_col when it's blank in gating_col_name, or when po_ctb actually within pack_cut_off
+    df_3a4.loc[:,impact_factor_col]=np.where((df_3a4[gating_col_name].isnull())|(df_3a4.po_ctb<=pack_cut_off),
+                                            None,
+                                             df_3a4[impact_factor_col] )
+
+    # Remove "YES/NO" from gating_col_name if impact_factor_col is blank
+    df_3a4.loc[:, gating_col_name] = np.where(df_3a4[impact_factor_col].isnull(),
+                                              None,
+                                              df_3a4[gating_col_name])
+
 
     # add the col to the list
     output_col.append(impact_factor_col)
@@ -846,16 +850,10 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
     output_col.append(impact_qty_col)
     output_col.append(gating_col_name)
 
-    print(output_col)
-    #print(df_3a4[output_col])
-
-    df_3a4.to_excel('test.xlsx')
-    raise ValueError
-
     # 制作汇总数据表 - 不考虑'BUSINESS_UNIT','PRODUCT_FAMILY'，后面处理后加入
     df_impact_rev_summary = df_3a4[(df_3a4[impact_factor_col].notnull())].pivot_table(index=['ORGANIZATION_CODE', impact_factor_col],
                                                                                     columns=gating_col_name,
-                                                                                    values=impact_rev_col,
+                                                                                    values='C_UNSTAGED_DOLLARS',
                                                                                     aggfunc=sum)
     df_impact_rev_summary.loc[:, 'Total'] = df_impact_rev_summary.sum(axis=1)
     df_impact_rev_summary = df_impact_rev_summary.applymap(lambda x: round(x / 1000000, 1))
@@ -868,68 +866,71 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
     df_impact_qty_summary.loc[:, 'Total'] = df_impact_qty_summary.sum(axis=1)
 
     # combine the rev and qty summaries
-    df_build_impact_summary=pd.merge(df_impact_rev_summary,df_impact_qty_summary,left_index=True,right_index=True,
-                                     sort=False,suffixes=('_x','_y'))
+    if df_impact_rev_summary.shape[0]>0:
+        df_build_impact_summary=pd.merge(df_impact_rev_summary,df_impact_qty_summary,left_index=True,right_index=True,
+                                         sort=False,suffixes=('_x','_y'))
 
-    df_build_impact_summary.rename(columns={'Non top-gating_x':'Rev impact (2nd-gating)',
-                                            'Top-gating_x':'Rev impact (1st-gating)',
-                                            'Total_x':'Rev impact (total)',
-                                            'Non top-gating_y':'Short qty (2nd-gating)',
-                                            'Top-gating_y':'Short qty (1st-gating)',
-                                            'Total_y':'Short qty (total)'},
-                                   inplace=True)
+        df_build_impact_summary.rename(columns={'NO_x':'Rev impact (non-gating)',
+                                                'YES_x':'Rev impact (1st-gating)',
+                                                'Total_x':'Rev impact (total)',
+                                                'NO_y':'Short qty (non-gating)',
+                                                'YES_y':'Short qty (1st-gating)',
+                                                'Total_y':'Short qty (total)'},
+                                       inplace=True)
 
-    # 把BU/PF信息加入summary (针对重复的org_PN (due to reporting to different BU/PF),对BU/PF做相应的汇总)
-    df_build_impact_summary.reset_index(inplace=True)
-    df_build_impact_summary.loc[:,'org_pn']=df_build_impact_summary.ORGANIZATION_CODE + '_' + df_build_impact_summary[impact_factor_col]
+        # 把BU/PF信息加入summary (针对重复的org_PN (due to reporting to different BU/PF),对BU/PF做相应的汇总)
+        df_build_impact_summary.reset_index(inplace=True)
+        df_build_impact_summary.loc[:,'org_pn']=df_build_impact_summary.ORGANIZATION_CODE + '_' + df_build_impact_summary[impact_factor_col]
 
-    df_3a4.loc[:,'org_pn']=df_3a4.ORGANIZATION_CODE + '_' + df_3a4.BOM_PN
-    dfx=df_3a4[df_3a4.org_pn.isin(df_build_impact_summary.org_pn.unique())][['org_pn','BUSINESS_UNIT','PRODUCT_FAMILY']]
-    dfx.drop_duplicates(['org_pn','BUSINESS_UNIT','PRODUCT_FAMILY'],inplace=True)
-    dfx.sort_values(by='org_pn',inplace=True) # important to sort first
-    org_pn_dic={} #生成一个org_pn：bu,pf的字典
-    org_pn=dfx.iloc[0,0]
-    bu = dfx.iloc[0,1]
-    pf = dfx.iloc[0,2]
-    org_pn_dic[org_pn]=[bu,pf]
-    for row in dfx[1:].itertuples(index=False):
-        org_pn_new=row.org_pn
-        bu_new=row.BUSINESS_UNIT
-        pf_new=row.PRODUCT_FAMILY
-        if org_pn_new!=org_pn:
-            org_pn=org_pn_new
-            bu=bu_new
-            pf=pf_new
-        else:
-            if bu_new not in bu:
-                bu=bu+'/'+bu_new
+        df_3a4.loc[:,'org_pn']=df_3a4.ORGANIZATION_CODE + '_' + df_3a4.BOM_PN
+        dfx=df_3a4[df_3a4.org_pn.isin(df_build_impact_summary.org_pn.unique())][['org_pn','BUSINESS_UNIT','PRODUCT_FAMILY']]
+        dfx.drop_duplicates(['org_pn','BUSINESS_UNIT','PRODUCT_FAMILY'],inplace=True)
+        dfx.sort_values(by='org_pn',inplace=True) # important to sort first
+        org_pn_dic={} #生成一个org_pn：bu,pf的字典
+        org_pn=dfx.iloc[0,0]
+        bu = dfx.iloc[0,1]
+        pf = dfx.iloc[0,2]
+        org_pn_dic[org_pn]=[bu,pf]
+        for row in dfx[1:].itertuples(index=False):
+            org_pn_new=row.org_pn
+            bu_new=row.BUSINESS_UNIT
+            pf_new=row.PRODUCT_FAMILY
+            if org_pn_new!=org_pn:
+                org_pn=org_pn_new
+                bu=bu_new
+                pf=pf_new
+            else:
+                if bu_new not in bu:
+                    bu=bu+'/'+bu_new
 
-            if pf_new not in pf:
-                pf=pf+'/'+pf_new
-        org_pn_dic[org_pn] = [bu, pf]
+                if pf_new not in pf:
+                    pf=pf+'/'+pf_new
+            org_pn_dic[org_pn] = [bu, pf]
 
-    df_build_impact_summary.loc[:,'BUSINESS_UNIT']=df_build_impact_summary.org_pn.map(lambda x: org_pn_dic[x][0] if x in org_pn_dic.keys() else None)
-    df_build_impact_summary.loc[:, 'PRODUCT_FAMILY'] = df_build_impact_summary.org_pn.map(lambda x: org_pn_dic[x][1] if x in org_pn_dic.keys() else None)
+        df_build_impact_summary.loc[:,'BUSINESS_UNIT']=df_build_impact_summary.org_pn.map(lambda x: org_pn_dic[x][0] if x in org_pn_dic.keys() else None)
+        df_build_impact_summary.loc[:, 'PRODUCT_FAMILY'] = df_build_impact_summary.org_pn.map(lambda x: org_pn_dic[x][1] if x in org_pn_dic.keys() else None)
 
-    df_build_impact_summary.drop('org_pn',axis=1,inplace=True)
-    df_build_impact_summary.loc[:,'Recovery date']=None
+        df_build_impact_summary.drop('org_pn',axis=1,inplace=True)
+        df_build_impact_summary.loc[:,'Recovery date']=None
 
-    # 把supply (future supply)合并入df_build_impact_summary
-    supply_col=pd.to_datetime(df_supply.columns).tolist()
-    supply_col=[dt.date() for dt in supply_col]
-    ind=0
-    for dt in supply_col:
-        if dt>supply_cut_off:
-            ind=supply_col.index(dt)
-            #print(supply_cut_off,dt,ind)
-            break
+        # 把supply (future supply)合并入df_build_impact_summary
+        supply_col=pd.to_datetime(df_supply.columns).tolist()
+        supply_col=[dt.date() for dt in supply_col]
+        ind=0
+        for dt in supply_col:
+            if dt>supply_cut_off:
+                ind=supply_col.index(dt)
+                #print(supply_cut_off,dt,ind)
+                break
 
-    #TODO: should use org_pn as merging key instead - currently only for single site so it's OK
-    df_supply_x=df_supply.iloc[:,ind:]
-    df_build_impact_summary=pd.merge(df_build_impact_summary,df_supply_x,left_on=impact_factor_col,right_on='TAN',how='left')
+        #TODO: should use org_pn as merging key instead - currently only for single site so it's OK
+        df_supply_x=df_supply.iloc[:,ind:]
+        df_build_impact_summary=pd.merge(df_build_impact_summary,df_supply_x,left_on=impact_factor_col,right_on='TAN',how='left')
 
-    df_build_impact_summary.set_index(['ORGANIZATION_CODE', impact_factor_col, 'BUSINESS_UNIT', 'PRODUCT_FAMILY'], inplace=True)
-    df_build_impact_summary.sort_values('Rev impact (total)', ascending=False, inplace=True)
+        df_build_impact_summary.set_index(['ORGANIZATION_CODE', impact_factor_col, 'BUSINESS_UNIT', 'PRODUCT_FAMILY'], inplace=True)
+        df_build_impact_summary.sort_values('Rev impact (total)', ascending=False, inplace=True)
+    else:
+        df_build_impact_summary=pd.DataFrame()
 
     return df_3a4,df_build_impact_summary,output_col
 
@@ -2228,7 +2229,7 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
                     #'build_impact_wk1':build_impact_summary_wk1,
                     #'build_impact_wk2':build_impact_summary_wk2,
                    'build_impact_qend': build_impact_qend,
-                    #'build_impact_itf': build_impact_itf,
+                   # 'build_impact_itf': build_impact_itf,
                     #'shortage_impact(vs FCD)':df_shortage_impact_fcd,
                    # 'shortage_qty(vs FCD)':df_shortage_qty_fcd,
                    #'shortage_impact(vs LT target)': df_shortage_impact_lt_target_fcd,

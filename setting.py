@@ -34,7 +34,7 @@ output_col=['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY', 'SO_SS', 'PO
            'BOM_PN','ADDRESSABLE_FLAG','priority_cat','priority_rank','ss_overall_rank','LINE_CREATION_DATE',
            'CURRENT_FCD_NBD_DATE','ORIGINAL_FCD_NBD_DATE', 'LT_TARGET_FCD','min_date','CUSTOMER_REQUESTED_SHIP_DATE','C_UNSTAGED_DOLLARS',
             'ORDERED_QUANTITY','C_UNSTAGED_QTY','PACKOUT_QUANTITY','supply_allocation','tan_qty_wo_supply',
-            'tan_supply_ready_date','po_supply_ready_date', 'earliest_packable_date','earliest_packable_date_factor','po_ctb', 'ctb_comment','ss_ctb',
+            'tan_supply_ready_date','po_supply_ready_date', 'earliest_allowed_pack_date','earliest_allowed_pack_date_factor','po_ctb', 'ctb_comment','ss_ctb',
             'ss_updated_status', 'CTB_STATUS(CTB_UI)','GLOBAL_RANK','RISO (as is)','RISO (to be)']
 
 # used temporarily when output testing file
@@ -49,10 +49,12 @@ mfg_holds=['Booking Validation Hold','Cancellation','CFOP Product Hold','CMFS-Cr
            'Country Certification Hold']
 
 #Logic to be clarified: both below should be met (take the min value of below)
-addressable_window={
-                    'LT_TARGET_FCD':28, # need to change code if these 2 dates change
-                    'TARGET_SSD':21
-                    }
+#addressable_window={
+#                    'LT_TARGET_FCD':28, # need to change code if these 2 dates change
+#                    'TARGET_SSD':21
+#                    }
+
+addressable_window = 30
 
 if getpass.getuser()=='ubuntu': # if it's on crate server
     base_dir_output = '/home/ubuntu/ctb_output'

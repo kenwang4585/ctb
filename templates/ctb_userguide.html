@@ -50,8 +50,9 @@
                     <h3>min_date</h3>
                     This is a min date of ORIGINAL_FCD_NBD_DATE and LT_TARGET_FCD; for Non_REVENUE orders it's same as CURRENT_FCD_NBD_DATE. If the dates are blank, then consider it as 30days from now.
 
-                    <h3>earliest_packable_date</h3>
-                    Default based on addressable backlog definition; for MFG_HOLD or Unscheduled PO, this date must not be within 30days from today; if there are other EXCEPTIONS (Indicated in Col EXCEPTION_NAME), then this date must not be within 14days from today.
+                    <h3>earliest_allowed_pack_date</h3>
+                    Default based on LT_TARGET_FCD - 30days; for MFG_HOLD or Unscheduled PO, this date must not be within 30days from today; if there are other EXCEPTIONS (Indicated in Col EXCEPTION_NAME), then this date must not be within 14days from today.
+                    If order is scheduled but LT_TARGET_FCD is missing, then it follows CURRENT_FCD_NBD_DATE - 30days.
 
                     <h3>po_ctb</h3>
                     This is generated based on "po_supply_ready_date", "earliest_packable_date" and FLT value.
