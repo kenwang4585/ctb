@@ -1,8 +1,8 @@
 from flask import Flask
-from flask_wtf.file import FileField
+#from flask_wtf.file import FileField
 from flask_wtf import FlaskForm
 from wtforms.validators import DataRequired
-from wtforms import SubmitField, StringField
+from wtforms import SubmitField, StringField, MultipleFileField, FileField
 import os
 from flask_sqlalchemy import SQLAlchemy
 
@@ -29,8 +29,10 @@ class UploadForm(FlaskForm):
     description=StringField('Description:',render_kw={'placeholder':'Short description show in output file name'})
 
     file_3a4 = FileField('Upload 3A4 file (.csv):',validators=[DataRequired()])
-    file_kinaxis_supply=FileField('Upload Kinaxis supply file (.xlsx):',validators=[DataRequired()])
+    file_kinaxis_supply=FileField('Upload Kinaxis supply file (.xlsx):')
     file_allocation_supply=FileField('Upload PCBA allocation file (.xlsx):')
+
+    file_supply_multiple=MultipleFileField('Supply files')
     submit_ctb=SubmitField(' RUN CTB ')
 
 class FileDownloadForm(FlaskForm):

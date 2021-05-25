@@ -26,15 +26,22 @@
     		<tr align="center">
                 <td width="5%"></td>
                 <td width='30%' align="left">
-                        <b>3A4 backlog (downloaded from UOV via kw_ctb):</b>
+                        <b>3A4 backlog:
+                            <abbr title="Download from UOV using view kw_ctb. Select the required org when downloading.">(data source):</abbr>
+                        </b>
                             {{ form.file_3a4 }}
                             <br><br>
 
-                    <b><abbr title="Default supply downloaded from Kinaxis">Primary</abbr> supply (downloaded from Kinaxis):</b>
+                        <b>Kinaxis supply
+                            <abbr title="This is default supply downloaded from Kinaxis, which is for DF components supply, or both DF + PCBA supply.">(base supply):</abbr>
+                        </b>
                             {{ form.file_kinaxis_supply }}
                             <br><br>
 
-                        <b>Optional supply (downloaded from PCBA allocation tool)</b>
+                        <b>PCBA allocation supply
+                            <abbr title="This is PCBA TAN supply created by the PCBA allocation tool; when uploaded, this will preferentially replace the supply in the Kinaxis supply file if same TAN exists. Date converted to ETA.">(preferential supply):
+                            </abbr>
+                        </b>
                             {{ form.file_allocation_supply }}
 
                 </td>

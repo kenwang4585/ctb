@@ -457,20 +457,33 @@ def consolidate_pcba_allocation_supply(df_supply_allocation,df_supply_tan_transi
     return df_supply_allocation_combined
 
 @write_log_time_spent
-def consolidate_allocated_pcba_and_kinaxis(df_supply_allocation_combined,df_supply_kinaxis,oh_date):
+def consolidate_allocated_pcba_and_kinaxis(df_supply_allocation_combined,df_supply_kinaxis):
     """
     Remove same TAN from Kinaxis supply and replace with the allocated pcba supply.
     """
-    # Change past to oh_date and remove 'ORG'
-    df_supply_allocation_combined.reset_index(inplace=True)
-    df_supply_allocation_combined.drop('ORG',axis=1,inplace=True)
-    df_supply_allocation_combined.rename(columns={'Past':oh_date},inplace=True)
-    df_supply_allocation_combined.set_index('TAN',inplace=True)
+    # Identify the min date from both reports as the oh_date
+    if df_supply_kinaxis.shape[0]>0:
+        oh_date_kinaxis=df_supply_kinaxis.columns[0]
+    else:
+        oh_date_kinaxis=pd.Timestamp.today().date()
+    if df_supply_allocation_combined.shape[0]>0:
+        oh_date_allocation=df_supply_allocation_combined.columns[0] - pd.Timedelta(1,'d')
+    else:
+        oh_date_allocation=pd.Timestamp.today().date()
+    oh_date = min(oh_date_kinaxis,oh_date_allocation)
 
-    # remove the same TAN from kinaxis file
-    df_supply_kinaxis.reset_index(inplace=True)
-    df_supply_kinaxis=df_supply_kinaxis[~df_supply_kinaxis.TAN.isin(df_supply_allocation_combined.index)].copy()
-    df_supply_kinaxis.set_index('TAN', inplace=True)
+    if df_supply_allocation_combined.shape[0] > 0:
+        # Change past to oh_date and remove 'ORG'
+        df_supply_allocation_combined.reset_index(inplace=True)
+        df_supply_allocation_combined.drop('ORG',axis=1,inplace=True)
+        df_supply_allocation_combined.rename(columns={'Past':oh_date},inplace=True)
+        df_supply_allocation_combined.set_index('TAN',inplace=True)
+
+    if df_supply_kinaxis.shape[0] > 0:
+        # remove the same TAN from kinaxis file
+        df_supply_kinaxis.reset_index(inplace=True)
+        df_supply_kinaxis=df_supply_kinaxis[~df_supply_kinaxis.TAN.isin(df_supply_allocation_combined.index)].copy()
+        df_supply_kinaxis.set_index('TAN', inplace=True)
 
     # concat both supply files
     df_supply=pd.concat([df_supply_kinaxis,df_supply_allocation_combined],sort=True)
@@ -2305,7 +2318,7 @@ def initial_process_kinaxis_supply(df_supply_kinaxis):
     df_supply_kinaxis = df_supply_kinaxis[df_supply_kinaxis.Total > 0].copy()
     df_supply_kinaxis.drop('Total', axis=1, inplace=True)
 
-    return df_supply_kinaxis,oh_date.date()
+    return df_supply_kinaxis
 
 @write_log_time_spent
 def exclude_pn_no_need_to_consider_from_kinaxis_supply(df_supply_kinaxis,class_code_exclusion):
@@ -2390,11 +2403,11 @@ def process_kinaxis_supply(df_supply_kinaxis,class_code_exclusion):
     Read supply data, CT2R (for CM collected data), and exceptional backlog (input input), and processed into the
     final format after exclude the packaging and label class codes. Also save the Kinaxis file with org in filename.
     """
-    df_supply_kinaxis,oh_date=initial_process_kinaxis_supply(df_supply_kinaxis)
+    df_supply_kinaxis=initial_process_kinaxis_supply(df_supply_kinaxis)
     df_supply_kinaxis=exclude_pn_no_need_to_consider_from_kinaxis_supply(df_supply_kinaxis, class_code_exclusion)
     df_supply_kinaxis=change_supply_to_versionless_and_addup_kinaxis_supply(df_supply_kinaxis,pn_col='TAN')
 
-    return df_supply_kinaxis,oh_date
+    return df_supply_kinaxis
 
 
 

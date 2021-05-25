@@ -96,23 +96,35 @@ def ctb_run():
         class_code_exclusion=class_code_exclusion.strip().split('/')
         class_code_exclusion=[x+'-' for x in class_code_exclusion]
         log_msg_main.append('Org: {}; BU: {}; Exclusion code: {}'.format(org,bu,class_code_exclusion))
-        log_msg = '\nOrg: {}; BU: {}; exclusion class: {}'.format(org,bu, class_code_exclusion)
+        log_msg = '\nOrg: {}; BU: {}; \nexclusion class: {}'.format(org,bu, class_code_exclusion)
         add_log_details(msg=log_msg)
 
         f_3a4 = form.file_3a4.data
         f_kinaxis_supply= form.file_kinaxis_supply.data
         f_allocation_supply = form.file_allocation_supply.data
 
-        # 存储文件 - will save again with Org name in file name later
-        #file_path_3a4 = os.path.join(app.config['UPLOAD_PATH'],'3a4.csv')
-        #file_path_supply = os.path.join(app.config['UPLOAD_PATH'],'supply.xlsx')
-        file_path_3a4 = os.path.join(base_dir_upload, login_user + '_'+ secure_filename(f_3a4.filename))
-        file_path_kinaxis_supply = os.path.join(base_dir_upload, login_user + '_'+ secure_filename(f_kinaxis_supply.filename))
-        f_3a4.save(file_path_3a4)
-        f_kinaxis_supply.save(file_path_kinaxis_supply)
-        if f_allocation_supply!=None:
+        # check and save supply file
+        if f_kinaxis_supply.filename=='' and f_allocation_supply.filename=='':
+            msg = 'Pls upload either or both of the supply file: Kinaxis supply file, PCBA allocation supply file(s).'
+            flash(msg,'warning')
+            return render_template('ctb_run.html', form=form, user=login_name)
+
+        if f_kinaxis_supply.filename!='':
+            file_path_kinaxis_supply = os.path.join(base_dir_upload, login_user + '_'+ secure_filename(f_kinaxis_supply.filename))
+            f_kinaxis_supply.save(file_path_kinaxis_supply)
+            add_log_details(msg='\nSupply Kinaxis: ' + f_kinaxis_supply.filename)
+            log_msg_main.append('Kinaxis supply')
+
+        if f_allocation_supply.filename!='':
             file_path_allocation_supply = os.path.join(base_dir_upload,login_user + '_' + secure_filename(f_allocation_supply.filename))
             f_allocation_supply.save(file_path_allocation_supply)
+            add_log_details(msg='\nSupply Kinaxis: ' + f_allocation_supply.filename)
+            log_msg_main.append('PCBA allocation supply')
+
+        # save 3a4 file
+        file_path_3a4 = os.path.join(base_dir_upload, login_user + '_'+ secure_filename(f_3a4.filename))
+        f_3a4.save(file_path_3a4)
+        add_log_details(msg='\n3a4: ' + f_3a4.filename)
 
         # 判断并定义ranking_col
         ranking_col = ranking_col_cust
@@ -126,32 +138,35 @@ def ctb_run():
                 return redirect(url_for('ctb_run', _external=True, _scheme='http', viewarg1=1))
 
             # read Kinaxis supply and check format
-            df_supply_kinaxis, error_msg=read_kinaxis_supply_and_check_format(file_path_kinaxis_supply, required_kinaxis_supply_col)
-            if error_msg != '':
-                add_log_details(msg=error_msg)
-                flash(error_msg, 'warning')
-                return redirect(url_for('ctb_run', _external=True, _scheme='http', viewarg1=1))
+            if f_kinaxis_supply.filename!='':
+                df_supply_kinaxis, error_msg=read_kinaxis_supply_and_check_format(file_path_kinaxis_supply, required_kinaxis_supply_col)
+                if error_msg != '':
+                    add_log_details(msg=error_msg)
+                    flash(error_msg, 'warning')
+                    return redirect(url_for('ctb_run', _external=True, _scheme='http', viewarg1=1))
 
-            # 处理 kinaxis supply data (oh_date used in allocation supply OH to use same date)
-            df_supply_kinaxis,oh_date = process_kinaxis_supply(df_supply_kinaxis, class_code_exclusion)
+                # 处理 kinaxis supply data (oh_date used in allocation supply OH to use same date)
+                df_supply_kinaxis = process_kinaxis_supply(df_supply_kinaxis, class_code_exclusion)
+            else:
+                df_supply_kinaxis=pd.DataFrame()
 
             # read pcba allocation supply and check format
-            # TODO: update inside of read_pcba_allocation.... multi-sourcing case with multi-allocation files
-            if f_allocation_supply!=None:
+            # TODO: update inside of read_pcba_allocation.... multi-files case with multi-allocation files
+            if f_allocation_supply.filename!='':
                 df_supply_allocation, df_supply_allocation_transit, df_supply_tan_transit_time, error_msg=read_pcba_allocation_supply_and_check_format(file_path_allocation_supply)
                 if error_msg != '':
                     add_log_details(msg=error_msg)
                     flash(error_msg, 'warning')
                     return redirect(url_for('ctb_run', _external=True, _scheme='http', viewarg1=1))
 
-                # TODO: process supply and update into kinaxis supply file (Replace by TAN)
+                # process supply and update into kinaxis supply file (Replace by TAN)
                 df_supply_allocation_combined=consolidate_pcba_allocation_supply(df_supply_allocation, df_supply_tan_transit_time,
                                                df_supply_allocation_transit, org_list)
-
-                # concat allocation PCBA to Kinaxis (remove same TAN from kinaxis file)
-                df_supply=consolidate_allocated_pcba_and_kinaxis(df_supply_allocation_combined, df_supply_kinaxis, oh_date)
             else:
-                df_supply=df_supply_kinaxis
+                df_supply_allocation_combined=pd.DataFrame()
+
+            # concat allocation PCBA data to Kinaxis data (remove same TAN from kinaxis file if exist)
+            df_supply = consolidate_allocated_pcba_and_kinaxis(df_supply_allocation_combined, df_supply_kinaxis)
 
             # 选择相关的org/bu
             df_3a4 = limit_3a4_org_and_bu(df_3a4,org_list,bu_list)
@@ -167,7 +182,7 @@ def ctb_run():
 
             finish_time = pd.Timestamp.now()
             processing_time = round((finish_time - start_time).total_seconds() / 60, 1)
-            log_msg='Processing time: ' + str(processing_time) + ' min'
+            log_msg='\nProcessing time: ' + str(processing_time) + ' min'
             log_msg_main.append(log_msg)
             add_log_details(msg=log_msg)
             print('Finish run:',finish_time.strftime('%Y-%m-%d %H:%M'))
