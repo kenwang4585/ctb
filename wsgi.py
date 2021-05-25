@@ -278,7 +278,7 @@ def download_file_trash(filename):
     if login_user != 'unknown':
         add_log_summary(user=login_user, location='Result', user_action='Download file', summary=filename)
 
-    return send_from_directory(f_path, filename=filename, as_attachment=True)
+    return send_from_directory(f_path, filename, as_attachment=True)
 
 @app.route('/o/<filename>',methods=['GET'])
 def download_file_output(filename):
@@ -287,7 +287,7 @@ def download_file_output(filename):
     login_user = request.headers.get('Oidc-Claim-Sub')
     if login_user != 'unknown':
         add_log_summary(user=login_user, location='Result', user_action='Download file', summary=filename)
-    return send_from_directory(f_path, filename=filename, as_attachment=True)
+    return send_from_directory(f_path, filename, as_attachment=True)
 
 @app.route('/u/<filename>',methods=['GET'])
 def download_file_upload(filename):
@@ -295,7 +295,7 @@ def download_file_upload(filename):
     login_user = request.headers.get('Oidc-Claim-Sub')
     if login_user != 'unknown':
         add_log_summary(user=login_user, location='Result', user_action='Download file',summary=filename)
-    return send_from_directory(f_path, filename=filename, as_attachment=True)
+    return send_from_directory(f_path, filename, as_attachment=True)
 
 @app.route('/l/<filename>',methods=['GET'])
 def download_file_logs(filename):
@@ -304,7 +304,7 @@ def download_file_logs(filename):
     login_user = request.headers.get('Oidc-Claim-Sub')
     if login_user != None:
         add_log_summary(user=login_user, location='Result', user_action='Download file',summary=filename)
-    return send_from_directory(f_path, filename=filename, as_attachment=True)
+    return send_from_directory(f_path, filename, as_attachment=True)
 
 
 
