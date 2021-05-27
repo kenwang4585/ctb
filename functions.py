@@ -60,6 +60,10 @@ def created_supply_dict_per_df_supply(df_supply):
     supply_dic_tan={'800-42373-01':[{'2/10':25},{'2/12':4},{'2/15':10},{'2/22':20},{'3/1':10},{'3/5':15}],
                '800-42925-01':[{'2/12':4},{'2/13':3},{'2/15':12},{'2/23':25},{'3/1':8},{'3/6':10}]}
     """
+
+    df_supply.duplicated().to_excel('test0.xlsx')
+    #df_supply.fillna(0,inplace=True)
+    df_supply.to_excel('test1.xlsx')
     #print(df_supply.loc['10-2366',:])
     supply_dic_tan = {}
     col=df_supply.columns
@@ -67,12 +71,14 @@ def created_supply_dict_per_df_supply(df_supply):
         date_qty_list = []
         for date in col:
             qty = df_supply.loc[tan, date]
-            if type(qty)==str:
-                print(tan,date,qty)
-            if qty > 0:
-
-                date_qty = {date: df_supply.loc[tan, date]}
-                date_qty_list.append(date_qty)
+            try:
+                if qty > 0:
+                    date_qty = {date: df_supply.loc[tan, date]}
+                    date_qty_list.append(date_qty)
+            except:
+                print(tan, date, qty)
+                raise ValueError
+                return "The qty is string format: tan/date/qty: {}/{}/{}".format(tan, date, qty)
 
         supply_dic_tan[tan] = date_qty_list
 
@@ -401,24 +407,27 @@ def read_pcba_allocation_supply_and_check_format(file_path_allocation_supply):
     except:
         error_msg="PCBA allocation file format error! Check sheets name: 'pcba_allocation','in-transit','transit_time_from_sourcing_rule'"
 
+
     return df_supply_allocation,df_supply_allocation_transit,df_supply_tan_transit_time, error_msg
 
 @write_log_time_spent
-def consolidate_pcba_allocation_supply(df_supply_allocation,df_supply_tan_transit_time,df_supply_allocation_transit,org_list):
+def consolidate_pcba_allocation_supply(df_supply_allocation,df_supply_tan_transit_time,df_supply_allocation_transit,org):
     """
     Process and consolidate the supply from PCBA allocation file into a format that need to integrate with Kinaxis supply data
     Org_list is just a single org currently
     """
 
     # get transit pad -- single DF ORG case
-    df_supply_tan_transit_time = df_supply_tan_transit_time[df_supply_tan_transit_time.DF_site.isin(org_list)].copy()
-    #print(df_supply_tan_transit_time)
-    transit_time=df_supply_tan_transit_time.iloc[0,4]
+    df_supply_tan_transit_time = df_supply_tan_transit_time[df_supply_tan_transit_time.DF_site==org].copy()
+    #!!!!!!! below need to ensure Transit_time col is the last Col in the sheet. which may be a risk!!
+    df_supply_tan_transit_time.drop_duplicates('DF_site',inplace=True)
+    df_supply_tan_transit_time.set_index('DF_site',inplace=True)
+    transit_time=df_supply_tan_transit_time.loc[org,'Transit_time']
     if transit_time==0:
         transit_time=1
 
     # process supply allocation data and apply transit time
-    df_supply_allocation=df_supply_allocation[df_supply_allocation.ORG.isin(org_list)].copy()
+    df_supply_allocation=df_supply_allocation[df_supply_allocation.ORG==org].copy()
 
     col=df_supply_allocation.columns.to_list()
     ind_start = col.index('Blg_recovery') + 1
@@ -433,12 +442,14 @@ def consolidate_pcba_allocation_supply(df_supply_allocation,df_supply_tan_transi
     col=pd.to_datetime(df_supply_allocation.columns)
     col=[(dt+pd.Timedelta(transit_time,'d')).date() for dt in col]
     df_supply_allocation.columns=col
+
+
     df_supply_allocation.dropna(axis=1, how='all', inplace=True)
     #df_supply_allocation.reset_index(inplace=True)
 
     # process in transit data
     df_supply_allocation_transit.drop('Total',axis=1,inplace=True)
-    df_supply_allocation_transit = df_supply_allocation_transit[df_supply_allocation_transit.DF_site.isin(org_list)].copy()
+    df_supply_allocation_transit = df_supply_allocation_transit[df_supply_allocation_transit.DF_site==org].copy()
     df_supply_allocation_transit.rename(columns={'DF_site':'ORG'},inplace=True)
     # convert to date
     if df_supply_allocation_transit.shape[0]>0:
@@ -453,6 +464,8 @@ def consolidate_pcba_allocation_supply(df_supply_allocation,df_supply_tan_transi
         df_supply_allocation_combined=pd.concat([df_supply_allocation,df_supply_allocation_transit],sort=True,join='outer')
     else:
         df_supply_allocation_combined=df_supply_allocation
+
+
 
     return df_supply_allocation_combined
 
@@ -488,17 +501,33 @@ def consolidate_allocated_pcba_and_kinaxis(df_supply_allocation_combined,df_supp
     # concat both supply files
     df_supply=pd.concat([df_supply_kinaxis,df_supply_allocation_combined],sort=True)
 
+    # add up the duplicate PN (due to multiple versions)
+    df_supply.sort_index(inplace=True)
+    df_supply.reset_index(inplace=True)
+    dup_pn = df_supply[df_supply.duplicated('TAN')]['TAN'].unique()
+    df_sum = pd.DataFrame(columns=df_supply.columns)
+
+    df_sum.set_index('TAN', inplace=True)
+    df_supply.set_index('TAN', inplace=True)
+
+    for pn in dup_pn:
+        # print(df_supply[df_supply.PN==pn].sum(axis=1).sum())
+        df_sum.loc[pn, :] = df_supply.loc[pn, :].sum(axis=0)
+
+    df_supply.drop(dup_pn, axis=0, inplace=True)
+    df_supply = pd.concat([df_supply, df_sum])
+
     return df_supply
 
 
 
 
 
-def limit_3a4_org_and_bu(df_3a4,org_list,bu_list):
+def limit_3a4_org_and_bu(df_3a4,org,bu_list):
     """
     Limit 3a4 to defined org and bu
     """
-    df_3a4 = df_3a4[df_3a4.ORGANIZATION_CODE.isin(org_list)].copy()
+    df_3a4 = df_3a4[df_3a4.ORGANIZATION_CODE==org].copy()
 
     if bu_list!=['']:
         df_3a4 = df_3a4[df_3a4.BUSINESS_UNIT.isin(bu_list)].copy()
@@ -2152,7 +2181,7 @@ def make_summary_fcd_vs_ctb(df_3a4):
     return dfc
 
 
-def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply,qend_list,output_col,login_user):
+def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend_list,output_col,login_user):
     """
     Consolidated main functions for this programs.
     :param df_3a4:
@@ -2258,10 +2287,11 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
                     'supply': df_supply,
                    }
     # save the output file
-    orgs='_'.join(org_list)
+    #orgs='_'.join(org_list)
+
     dt=(pd.Timestamp.now()+pd.Timedelta(hours=8)).strftime('%m-%d %Hh%Mm') #convert from server time to local
 
-    output_filename = orgs + ' CTB'
+    output_filename = org + ' CTB'
     if bu_list!=['']:
         bu = '_'.join(bu_list)
         output_filename = output_filename + ' (' + bu + ')'

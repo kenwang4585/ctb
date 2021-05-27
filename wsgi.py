@@ -84,8 +84,8 @@ def ctb_run():
         add_log_details(msg=log_msg)
 
         # 通过条件判断及邮件赋值，开始执行任务
-        org=form.org.data # currently only support one org one time
-        org_list=org.strip().upper().split('/')
+        org=form.org.data.strip().upper() # currently only support one org one time
+        #org_list=org.strip().upper().split('/')
 
         bu=form.bu.data
         bu_list=bu.strip().upper().split('/')
@@ -161,7 +161,8 @@ def ctb_run():
 
                 # process supply and update into kinaxis supply file (Replace by TAN)
                 df_supply_allocation_combined=consolidate_pcba_allocation_supply(df_supply_allocation, df_supply_tan_transit_time,
-                                               df_supply_allocation_transit, org_list)
+                                               df_supply_allocation_transit, org)
+
             else:
                 df_supply_allocation_combined=pd.DataFrame()
 
@@ -169,13 +170,13 @@ def ctb_run():
             df_supply = consolidate_allocated_pcba_and_kinaxis(df_supply_allocation_combined, df_supply_kinaxis)
 
             # 选择相关的org/bu
-            df_3a4 = limit_3a4_org_and_bu(df_3a4,org_list,bu_list)
+            df_3a4 = limit_3a4_org_and_bu(df_3a4,org,bu_list)
 
             # 读取Exceptional PO from smartsheet and add in 3a4
             df_3a4 = read_and_add_exception_po_to_3a4(df_3a4)
 
             # Rank backlog，allocate supply, and make the summaries
-            output_filename=main_program_all(df_3a4, org_list,bu_list,description, ranking_col, df_supply, qend_list, output_col,login_user)
+            output_filename=main_program_all(df_3a4, org,bu_list,description, ranking_col, df_supply, qend_list, output_col,login_user)
             log_msg='CTB file created:{}! You can download accordingly.'.format(output_filename)
             flash(log_msg, 'success')
             add_log_details(msg=log_msg)
