@@ -96,7 +96,6 @@
                                             <td width="500"><span style="font-size: large;">&nbsp;&nbsp;File name</span></td>
                                             <td width="200"><span style="font-size: large">&nbsp;&nbsp;Creation time</span></td>
                                             <td width="120"><span style="font-size: large">&nbsp;&nbsp;File size</span></td>
-                                            <td width="120">&nbsp;&nbsp;File download</td>
                                             <td width="120">&nbsp;&nbsp;File recover</td>
                                         </tr>
                                         {% for row in files_trash %}
@@ -104,9 +103,6 @@
                                                 {% for col in row[:3] %}
                                                     <td><span style="font-size: small">&nbsp;&nbsp;&nbsp;{{col}}</span></td>
                                                 {% endfor %}
-                                                <td align="center">
-                                                    <a href="{{ url_for('download_file_trash',filename=row[0]) }}">download</a>
-                                                </td>
                                                 <td align="center">
                                                     <a href="{{ url_for('recover_file_trash',login_user=login_user,filename=row[0]) }}">put back</a>
                                                 </td>
