@@ -2235,7 +2235,7 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
 
     # make build impact summaries
     df_3a4,build_impact_summary_wk0,output_col=make_summary_build_impact(df_3a4, df_supply,output_col, qend,blg_with_allocation,FLT,cut_off='wk0')
-    df_3a4, build_impact_qend,output_col = make_summary_build_impact(df_3a4, df_supply,output_col,qend,blg_with_allocation,FLT,cut_off='QEND')
+    #df_3a4, build_impact_qend,output_col = make_summary_build_impact(df_3a4, df_supply,output_col,qend,blg_with_allocation,FLT,cut_off='QEND')
     #df_3a4, build_impact_itf, output_col = make_summary_build_impact(df_3a4, df_supply, output_col, qend,blg_with_allocation, FLT, cut_off='ITF')
 
     # output the file
@@ -2248,7 +2248,7 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
                    'build_impact_wk0':build_impact_summary_wk0,
                     #'build_impact_wk1':build_impact_summary_wk1,
                     #'build_impact_wk2':build_impact_summary_wk2,
-                   'build_impact_qend': build_impact_qend,
+                   #'build_impact_qend': build_impact_qend,
                    # 'build_impact_itf': build_impact_itf,
                     #'shortage_impact(vs FCD)':df_shortage_impact_fcd,
                    # 'shortage_qty(vs FCD)':df_shortage_qty_fcd,
@@ -2259,13 +2259,16 @@ def main_program_all(df_3a4,org_list, bu_list, description,ranking_col,df_supply
                    }
     # save the output file
     orgs='_'.join(org_list)
-    bu='_'.join(bu_list)
     dt=(pd.Timestamp.now()+pd.Timedelta(hours=8)).strftime('%m-%d %Hh%Mm') #convert from server time to local
-    if bu=='' and description=='':
-        output_filename = orgs + ' CTB ' + dt + ' ' + login_user + '.xlsx'
-    else:
-        output_filename = orgs + ' CTB ' + dt + ' ' + login_user + ' (' + bu + ' ' + description + ').xlsx'
 
+    output_filename = orgs + ' CTB'
+    if bu_list!=['']:
+        bu = '_'.join(bu_list)
+        output_filename = output_filename + ' (' + bu + ')'
+    if description!='':
+        output_filename = output_filename + ' ' + description
+
+    output_filename = output_filename + ' ' + login_user + ' ' + dt + '.xlsx'
     write_data_to_spreadsheet(base_dir_output, output_filename, data_to_write)
 
     del df_3a4, df_supply, df_bom,blg_with_allocation,supply_dic_tan,blg_dic_tan#,df_sd_combined_short
