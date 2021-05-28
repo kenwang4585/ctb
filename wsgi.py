@@ -33,6 +33,7 @@ def ctb_result():
         login_name = 'unknown'
 
     if login_user not in allowed_user:
+        add_log_summary(user=login_user, location='Result', user_action='Visit-trying', summary='')
         raise ValueError
 
     form = FileDownloadForm()
@@ -210,7 +211,7 @@ def ctb_run():
             # Write the log file
             log_msg_main.append('Error: ' + str(e))
             summary='; '.join(log_msg_main)
-            add_log_summary(user=login_user, location='Run', user_action='Run CTB', summary=summary)
+            add_log_summary(user=login_user, location='Run', user_action='Run CTB - error', summary=summary)
 
             # write error log details
             traceback.print_exc(file=open(os.path.join(base_dir_logs, 'log_details.txt'), 'a+'))
@@ -317,10 +318,6 @@ def ctb_admin():
     if login_user == None:
         login_user = 'unknown'
         login_name = 'unknown'
-
-    allowed_user=['unknown','kwang2','anhao','cagong','hiung','julzhou','julwu','rachzhan','alecui','daidai','raeliu','karzheng']
-    if login_user not in allowed_user:
-        raise ValueError
 
     if login_user!='unknown' and login_user!='kwang2':
         return redirect(url_for('ctb_run',_external=True,_scheme='http',viewarg1=1))

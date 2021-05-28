@@ -60,3 +60,4 @@ class CtbUserLog(db.Model):
     LOCATION=db.Column(db.String(25))
     USER_ACTION=db.Column(db.String(35))
     SUMMARY=db.Column(db.Text)
+

@@ -2,7 +2,7 @@ import os
 import getpass
 
 allowed_user = ['unknown', 'kwang2', 'anhao', 'cagong', 'hiung', 'julzhou', 'julwu', 'rachzhan', 'alecui', 'daidai',
-                'raeliu', 'karzheng']
+                'raeliu', 'karzheng','seyang']
 
 
 # Quarter end cutoff
