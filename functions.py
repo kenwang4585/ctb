@@ -6,12 +6,14 @@ import gc
 import numpy as np
 import re
 import traceback
+import smartsheet
 from smartsheet_handler import SmartSheetClient
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context #zzs
 from sending_email import *
 import time
 from functools import wraps
 from db_read import read_table
-import smartsheet
 
 plt.rcParams.update({'figure.max_open_warning': 0})
 
@@ -2068,6 +2070,24 @@ def read_cm_ctb_from_smartsheet():
     return att_df, ctb_error_msg
 
 
+def merge_cm_ctb_exception_to_3a4(df_3a4,df_ctb):
+    """
+    Merge CM CTB exceptions to 3a4: TECHNICAL
+    """
+
+    df_ctb_exception=df_ctb[df_ctb.CTB_STATUS.isin(['TECHNICAL','BUILD MANAGEMENT'])].copy()
+    df_ctb_exception.rename(columns={'CTB_STATUS':'EXCEPTION_NAME'},inplace=True)
+
+    regex_line = re.compile(r'-\d+')
+    df_3a4.loc[:, 'line'] = df_3a4.PO_NUMBER.map(lambda x: regex_line.search(x).group())
+    df_3a4.loc[:, 'SO_SS_LN'] = df_3a4.SO_SS + df_3a4.line
+
+    df_3a4 = pd.merge(df_3a4, df_ctb_exception, left_on='SO_SS_LN', right_on='SO_SS_LN', how='left')
+
+    df_3a4.drop(['line', 'SO_SS_LN'], axis=1, inplace=True)
+
+    return df_3a4
+
 
 @write_log_time_spent
 def read_and_add_exception_po_to_3a4(df_3a4):
@@ -2258,14 +2278,12 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
     :return:
     """
     # read_cm_ctb_from_smartsheet
-    #att_df, ctb_error_msg=read_cm_ctb_from_smartsheet()
-
-    #att_df.to_excel('test.xlsx')
-    #raise ValueError
+    df_ctb, ctb_error_msg=read_cm_ctb_from_smartsheet()
     # merge the exception from cm CTB to df_3a4
+    df_3a4=merge_cm_ctb_exception_to_3a4(df_3a4,df_ctb)
 
-    df_3a4=read_and_add_exception_po_to_3a4(df_3a4)
-
+    # use above instead
+    #df_3a4=read_and_add_exception_po_to_3a4(df_3a4)
 
     qend=decide_qend_date(qend_list)
     # Do basic data processing for 3a4
