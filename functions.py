@@ -2390,7 +2390,7 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
         bu = '_'.join(bu_list)
         output_filename = output_filename + ' (' + bu + ')'
     if description!='':
-        output_filename = output_filename + ' ' + description
+        output_filename = output_filename + ' (' + description + ')'
 
     output_filename = output_filename + ' ' + login_user + ' ' + dt + '.xlsx'
     write_data_to_spreadsheet(base_dir_output, output_filename, data_to_write)
