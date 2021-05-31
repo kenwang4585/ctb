@@ -10,6 +10,8 @@ from smartsheet_handler import SmartSheetClient
 from sending_email import *
 import time
 from functools import wraps
+from db_read import read_table
+import smartsheet
 
 plt.rcParams.update({'figure.max_open_warning': 0})
 
@@ -1982,12 +1984,98 @@ def get_packed_or_cancelled_ss_from_3a4(df_3a4):
     return ss_cancelled_or_packed_3a4
 
 @write_log_time_spent
+def read_cm_ctb_from_smartsheet():
+    '''
+    Read CTB data from smartsheet - pick the latest record by org
+    '''
+    # 数据源基本设定 - smartsheet设定
+    token = os.getenv('SMARTSHEET_TOKEN_CTB')
+    attachment_sheet_id = os.getenv('CTB_SHEET_ID')
+
+    proxies = None  # for proxy server
+
+    ctb_error_msg = []
+
+    # 读取smartsheet的对象（从smartsheet_hanndler导入类）
+    smartsheet_client = SmartSheetClient(token, proxies)
+
+    # 从smartsheet读取attachment
+    attachment_sheet_df = smartsheet_client.get_sheet_as_df(attachment_sheet_id, add_row_id=True, add_att_id=True)
+    # 按照CM org保留最后的记录
+    attachment_sheet_df.drop_duplicates(['CM'], keep='last', inplace=True)
+    attachment_sheet_df.reset_index(inplace=True)
+    attachment_sheet_df.drop('index', axis=1, inplace=True)
+
+    # only keep data uploaded within 7 days - not able to due to Created col is shown as None
+    #attachment_sheet_df=attachment_sheet_df[attachment_sheet_df.Created>=pd.Timestamp.now()-pd.Timedelta(7,'d')]
+
+    # 将相应的attachment内容读入att_df并在smartsheet中做相应标识
+    att_df = pd.DataFrame(columns=['SO_SS_LN', 'BUILD_DATE', 'CTB_STATUS', 'CTB_COMMENT'])
+    for row in range(attachment_sheet_df.shape[0]):
+        attachment_id = attachment_sheet_df.loc[row, 'attachment_id']
+        row_id = attachment_sheet_df.loc[row, 'row_id']
+
+        # print(row_id,attachment_id)
+        # 读取附加内容
+        att_df_new = smartsheet_client.get_attachment_per_row_as_df(attachment_id=attachment_id,
+                                                                    sheet_id=attachment_sheet_id,
+                                                                    row_id=row_id)
+
+        # 对附件内容进行验证 - 格式正确则读取内容
+        temp_col = ['SO_SS_LN', 'BUILD_DATE', 'CTB_STATUS', 'CTB_COMMENT']
+
+        file_uploaded_by = attachment_sheet_df.loc[row, 'UPLOADED_BY']
+        file_org = attachment_sheet_df.loc[row, 'CM']
+        file_upload_date = attachment_sheet_df.loc[row, 'Created']
+
+        missing_col = np.setdiff1d(temp_col, att_df_new.columns.values)
+
+        if len(missing_col) > 0:
+            update_dict = [{'STATUS': 'FORMAT_ERROR'}]
+            # error_format_org=att_df_new.ORGANIZATION_CODE.unique() # not using this as org col may be missing
+
+            msg = 'Latest CTB format error: {} file loaded by {} on {}'.format(
+                file_org, file_uploaded_by, file_upload_date)
+
+            ctb_error_msg.append(msg)
+        else:
+            if att_df_new.shape[0] > 0:
+                read_date = pd.Timestamp.now().strftime('%Y-%m-%d')
+                update_dict = [{'STATUS': 'COLLECTED', 'READ_DATE': read_date}]
+                att_df = pd.concat([att_df, att_df_new], join='outer', sort=False)
+                msg = 'CTB file used: {} file loaded by {} on {}'.format(
+                    file_org, file_uploaded_by, file_upload_date)
+            else:
+                update_dict = [{'STATUS': 'EMPTY_CONTENT'}]
+                msg = 'Latest CTB content empty: {} file loaded by {} on {}'.format(
+                    file_org, file_uploaded_by, file_upload_date)
+
+                ctb_error_msg.append(msg)
+
+        # 更新smartsheet
+        smartsheet_client.update_row_with_dict(ss=smartsheet.Smartsheet(token), process_type='update',
+                                               sheet_id=attachment_sheet_id,
+                                               row_id=int(attachment_sheet_df.iloc[row]['row_id']),
+                                               update_dict=update_dict)
+        if len(ctb_error_msg)>0:
+            print('CTB error: \n', ctb_error_msg)
+
+    att_df.rename(columns={'BUILD_DATE':'CM_CTB'},inplace=True)
+
+    del attachment_sheet_df,att_df_new
+    gc.collect()
+
+    return att_df, ctb_error_msg
+
+
+
+@write_log_time_spent
 def read_and_add_exception_po_to_3a4(df_3a4):
     """
     Read Exceptional PO (GIMS, Config, etc) from smartsheet and add to 3a4
     """
     # 从smartsheet读取backlog
-    token = os.getenv('PRIORITY_TOKEN')
+    token = os.getenv('SMARTSHEET_TOKEN_CTB')
     sheet_id = os.getenv('EXCEPTION_ID')
     proxies = None  # for proxy server
     smartsheet_client = SmartSheetClient(token, proxies)
@@ -2006,38 +2094,20 @@ def read_and_add_exception_po_to_3a4(df_3a4):
     return df_3a4
 
 @write_log_time_spent
-def read_backlog_priority_from_smartsheet(df_3a4,login_user):
+def read_exceptional_backlog_priority_from_db(db_name='allocation_exception_priority'):
     '''
-    Read backlog priorities from smartsheet; remove SS showing packed/cancelled, or created by self but disappear from 34(if the org/BU also exist in 3a4.);
-     create and segregate to top priority and mid priority
-    :return:
+    Read backlog priorities from db;create and segregate to top priority and mid priority
     '''
-    # 从smartsheet读取backlog
-    token = os.getenv('PRIORITY_TOKEN')
-    sheet_id = os.getenv('PRIORITY_ID')
-    proxies = None  # for proxy server
-    smartsheet_client = SmartSheetClient(token, proxies)
-    df_smart = smartsheet_client.get_sheet_as_df(sheet_id, add_row_id=True, add_att_id=False)
-
-    # Identify SS not in df_3a4 that can be removed - SS created by self and is disappeared from 3a4 - if the 3a4 include the org and BU
-    df_smart_self=df_smart[df_smart['Created By']==login_user+'@cisco.com']
-    df_smart_w_org_bu_in_3a4 = df_smart_self[
-        (df_smart_self.ORG.isin(df_3a4.ORGANIZATION_CODE.unique())) & (df_smart_self.BU.isin(df_3a4.BUSINESS_UNIT.unique()))]
-    ss_not_in_3a4 = np.setdiff1d(df_smart_w_org_bu_in_3a4.SO_SS.values, df_3a4.SO_SS.values)
-
-    # SS showing as packed or cancelled in 3a4 - discard below
-    #ss_cancelled_or_packed_3a4 = get_packed_or_cancelled_ss_from_3a4(df_3a4)
-
-    # total ss to remove - discard below
-    #df_removal = df_smart[(df_smart.SO_SS.isin(ss_cancelled_or_packed_3a4)) | (df_smart.SO_SS.isin(ss_not_in_3a4))]
+    # read the data from db - share same db with allocation
+    df_priority=read_table(db_name)
 
     # create the priority dict
-    df_smart.drop_duplicates('SO_SS', keep='last', inplace=True)
-    df_smart = df_smart[(df_smart.SO_SS.notnull()) & (df_smart.Ranking.notnull())]
+    df_priority.drop_duplicates('SO_SS', keep='last', inplace=True)
+    df_priority = df_priority[(df_priority.SO_SS.notnull()) & (df_priority.Ranking.notnull())]
     ss_exceptional_priority = {}
     priority_top = {}
     priority_mid = {}
-    for row in df_smart.itertuples():
+    for row in df_priority.itertuples():
         try: # in case error input of non-num ranking
             if float(row.Ranking)<4:
                 priority_top[row.SO_SS] = float(row.Ranking)
@@ -2187,6 +2257,15 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
     :param df_3a4:
     :return:
     """
+    # read_cm_ctb_from_smartsheet
+    #att_df, ctb_error_msg=read_cm_ctb_from_smartsheet()
+
+    #att_df.to_excel('test.xlsx')
+    #raise ValueError
+    # merge the exception from cm CTB to df_3a4
+
+    df_3a4=read_and_add_exception_po_to_3a4(df_3a4)
+
 
     qend=decide_qend_date(qend_list)
     # Do basic data processing for 3a4
@@ -2199,10 +2278,7 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
     df_3a4=redefine_addressable_flag_main_pip_version(df_3a4)
 
     # read smartsheet priorities
-    ss_exceptional_priority = read_backlog_priority_from_smartsheet(df_3a4, login_user)
-
-    # Remove and send email notification for ss removal from exceptional priority smartsheet - discard below
-    #remove_priority_ss_from_smtsheet_and_notify(df_removal, login_user, sender='APJC DF - auto CTB')
+    ss_exceptional_priority = read_exceptional_backlog_priority_from_db(db_name='allocation_exception_priority')
 
     # remove cancelled/packed orders - remove the record from 3a4 (in creating blg dict it's double removed - together with packed orders)
     df_3a4 = df_3a4[(df_3a4.ADDRESSABLE_FLAG != 'PO_CANCELLED') & (df_3a4.PACKOUT_QUANTITY != 'Packout Completed')].copy()

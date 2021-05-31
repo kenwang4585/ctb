@@ -173,9 +173,6 @@ def ctb_run():
             # 选择相关的org/bu
             df_3a4 = limit_3a4_org_and_bu(df_3a4,org,bu_list)
 
-            # 读取Exceptional PO from smartsheet and add in 3a4
-            df_3a4 = read_and_add_exception_po_to_3a4(df_3a4)
-
             # Rank backlog，allocate supply, and make the summaries
             output_filename=main_program_all(df_3a4, org,bu_list,description, ranking_col, df_supply, qend_list, output_col,login_user)
             log_msg='CTB file created:{}! You can download accordingly.'.format(output_filename)
