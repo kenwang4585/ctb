@@ -799,16 +799,41 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
 
     # update in 3a4 if supply impact cut_off week build
     impact_factor_col=cut_off + '_impact_factor'
-    #impact_rev_col='build_gap_dollar_'+cut_off
+    addr_col= cut_off + '_addressable_flag'
     impact_qty_col=cut_off + '_short_qty'
     gating_col_name = cut_off + '_top_gating'
 
     # 添加rev impact 列（po unstaged revenue)
     # NOTE: For order within pack_cut_off + 30 days, if ctb not within pack_cut_off, then specified as build impact.
     #       The logic is close to the addressable logic.
+
+    # add addressable column
     build_window=pack_cut_off+pd.Timedelta(30,'d')
-     # 添加label - for wk0 first step strictly follow ['MFG_HOLD','NOT_ADDRESSABLE','UNSCHEDULED'] for consistentcy.
-    if cut_off=='wk0':
+    if pack_cut_off<=today + pd.Timedelta(14,'d'): # within 2 weeks
+        df_3a4.loc[:, addr_col] = np.where(df_3a4.ADDRESSABLE_FLAG.isin(['MFG_HOLD','NOT_ADDRESSABLE','UNSCHEDULED']),
+                                                    df_3a4.ADDRESSABLE_FLAG,
+                                                    np.where(df_3a4.EXCEPTION_NAME.notnull(),
+                                                            'GIMS/Config/etc',
+                                                             np.where(df_3a4.earliest_allowed_pack_date>build_window,
+                                                                      'OUTSIDE_WINDOW',
+                                                                      None)))
+    else:
+        df_3a4.loc[:, addr_col] = np.where(df_3a4.earliest_allowed_pack_date > build_window,
+                                            'OUTSIDE_WINDOW',
+                                            None)
+
+
+    # add impact factor column
+    df_3a4.loc[:, impact_factor_col] = np.where(df_3a4[addr_col].notnull(),
+                                                df_3a4[addr_col],
+                                                np.where(df_3a4.po_ctb <= pack_cut_off,
+                                                         'GO',
+                                                         np.where((df_3a4.tan_supply_ready_date.isnull()) | (df_3a4.tan_supply_ready_date > supply_cut_off),
+                                                                    df_3a4.BOM_PN,
+                                                                    None)))
+
+    """
+   if cut_off=='wk0':
         df_3a4.loc[:, impact_factor_col] = np.where(df_3a4.ADDRESSABLE_FLAG.isin(['MFG_HOLD','NOT_ADDRESSABLE','UNSCHEDULED']),
                                                     df_3a4.ADDRESSABLE_FLAG,
                                                     np.where(df_3a4.po_ctb<=pack_cut_off,
@@ -834,7 +859,13 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
                                                                                                np.where((df_3a4.tan_supply_ready_date.isnull()) | (df_3a4.tan_supply_ready_date > supply_cut_off),
                                                                                                       df_3a4.BOM_PN,
                                                                                                       None)
-                                                                                                ))))))
+                                                                                                )
+                                                                                        )
+                                                                               )
+                                                                      )
+                                                             )
+                                                    )
+    """
 
     # 添加数量列(shortage by the supply cut off date)
     dfx = df_3a4[(df_3a4.earliest_allowed_pack_date<=pack_cut_off) &
