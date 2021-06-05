@@ -2358,7 +2358,7 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
 
     # make build impact summaries
     df_3a4,build_impact_summary_wk0,output_col=make_summary_build_impact(df_3a4, df_supply,output_col, qend,blg_with_allocation,FLT,cut_off='wk0')
-    #df_3a4, build_impact_qend,output_col = make_summary_build_impact(df_3a4, df_supply,output_col,qend,blg_with_allocation,FLT,cut_off='QEND')
+    df_3a4, build_impact_qend,output_col = make_summary_build_impact(df_3a4, df_supply,output_col,qend,blg_with_allocation,FLT,cut_off='QEND')
     #df_3a4, build_impact_itf, output_col = make_summary_build_impact(df_3a4, df_supply, output_col, qend,blg_with_allocation, FLT, cut_off='ITF')
 
     # output the file
@@ -2371,7 +2371,7 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
                    'build_impact_wk0':build_impact_summary_wk0,
                     #'build_impact_wk1':build_impact_summary_wk1,
                     #'build_impact_wk2':build_impact_summary_wk2,
-                   #'build_impact_qend': build_impact_qend,
+                   'build_impact_qend': build_impact_qend,
                    # 'build_impact_itf': build_impact_itf,
                     #'shortage_impact(vs FCD)':df_shortage_impact_fcd,
                    # 'shortage_qty(vs FCD)':df_shortage_qty_fcd,
