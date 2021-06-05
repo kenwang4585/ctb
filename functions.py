@@ -732,9 +732,9 @@ def redefine_addressable_flag_main_pip_version(df_3a4):
                                                 df_3a4.ADDRESSABLE_FLAG)
 
     # Non_revenue orders
-    df_3a4.loc[:, 'ADDRESSABLE_FLAG'] = np.where(df_3a4.REVENUE_NON_REVENUE=='NO',
-                                                  'NON_REVENUE',
-                                                df_3a4.ADDRESSABLE_FLAG)
+    #df_3a4.loc[:, 'ADDRESSABLE_FLAG'] = np.where(df_3a4.REVENUE_NON_REVENUE=='NO',
+    #                                              'NON_REVENUE',
+    #                                            df_3a4.ADDRESSABLE_FLAG)
 
 
     #  mfg-hold
@@ -819,22 +819,22 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
                                                                                 df_3a4.BOM_PN,
                                                                                None)
                                                                       )))
-    else:
+    else: # the the addressable is not following the flag (different from wk0); and hold/unscheudle...etc mot different from wk0
         df_3a4.loc[:, impact_factor_col] = np.where(df_3a4.earliest_allowed_pack_date>build_window,
-                                                    'NOT_ADDRESSABLE',
+                                                    'NOT_ADDRESSABLE', # this addressable considered build window - different from wk0 which is following the flag
                                                     np.where(df_3a4.po_ctb<=pack_cut_off,
                                                              'GO',
-                                                             np.where(df_3a4.po_ctb>df_3a4.earliest_allowed_pack_date,# due to material
-                                                                      df_3a4.BOM_PN,
-                                                                      np.where(df_3a4.ADDRESSABLE_FLAG=='MFG_HOLD',
+                                                             np.where(df_3a4.po_ctb>=df_3a4.earliest_allowed_pack_date,# due to material
+                                                                      np.where(df_3a4.ADDRESSABLE_FLAG == 'MFG_HOLD',
                                                                                'MFG_HOLD',
                                                                                np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
-                                                                                        'UNSCHEDULED',
-                                                                                        np.where(df_3a4.EXCEPTION_NAME.notnull(),
-                                                                                                 'GIMS/Config/etc',
-                                                                                                 'NOT_ADDRESSABLE')))),
-                                                             ))
-
+                                                                                       'UNSCHEDULED',
+                                                                                       np.where(df_3a4.EXCEPTION_NAME.notnull(),
+                                                                                               'GIMS/Config/etc',
+                                                                                               np.where((df_3a4.tan_supply_ready_date.isnull()) | (df_3a4.tan_supply_ready_date > supply_cut_off),
+                                                                                                      df_3a4.BOM_PN,
+                                                                                                      None)
+                                                                                                ))))))
 
     # 添加数量列(shortage by the supply cut off date)
     dfx = df_3a4[(df_3a4.earliest_allowed_pack_date<=pack_cut_off) &
