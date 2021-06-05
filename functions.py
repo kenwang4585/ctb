@@ -388,7 +388,7 @@ def read_kinaxis_supply_and_check_format(file_path_kinaxis_supply, required_kina
     Read the Kinaxis supply and check to ensure the needed columns are included
     """
     df_supply_kinaxis=pd.read_excel(file_path_kinaxis_supply,header=1)
-    col_supply=df_supply_kinaxis.columns
+    col_supply=df_supply_kinaxis.columns[:18] # first 18 col to make below check faster
     supply_format_correct=np.all(np.in1d(required_kinaxis_supply_col,col_supply))
 
     if supply_format_correct==False:
@@ -810,6 +810,7 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
     # add addressable column
     build_window=pack_cut_off+pd.Timedelta(30,'d')
     if pack_cut_off<=today + pd.Timedelta(14,'d'): # within 2 weeks
+        """
         df_3a4.loc[:, addr_col] = np.where(df_3a4.ADDRESSABLE_FLAG.isin(['MFG_HOLD','NOT_ADDRESSABLE','UNSCHEDULED']),
                                                     df_3a4.ADDRESSABLE_FLAG,
                                                     np.where(df_3a4.EXCEPTION_NAME.notnull(),
@@ -817,6 +818,14 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
                                                              np.where(df_3a4.earliest_allowed_pack_date>build_window,
                                                                       'OUTSIDE_WINDOW',
                                                                       None)))
+        """
+        df_3a4.loc[:, addr_col] = np.where(df_3a4.earliest_allowed_pack_date > build_window,
+                                           'OUTSIDE_WINDOW',
+                                           np.where(df_3a4.ADDRESSABLE_FLAG.isin(['MFG_HOLD', 'UNSCHEDULED']),
+                                                    df_3a4.ADDRESSABLE_FLAG,
+                                                   np.where(df_3a4.EXCEPTION_NAME.notnull(),
+                                                            'GIMS/Config/etc',
+                                                            None)))
     else:
         df_3a4.loc[:, addr_col] = np.where(df_3a4.earliest_allowed_pack_date > build_window,
                                             'OUTSIDE_WINDOW',
