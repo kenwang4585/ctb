@@ -184,7 +184,7 @@ def ctb_run():
             log_msg='\nProcessing time: ' + str(processing_time) + ' min'
             log_msg_main.append(log_msg)
             add_log_details(msg=log_msg)
-            print('Finish run:',finish_time.strftime('%Y-%m-%d %H:%M'))
+            print('Finish run for {}: {}'.format(login_user,finish_time.strftime('%Y-%m-%d %H:%M')))
 
             # Write the log summary
             summary='; '.join(log_msg_main)
