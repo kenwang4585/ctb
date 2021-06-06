@@ -53,8 +53,18 @@ def ctb_result():
                            upload_record_days=int(upload_record_hours / 24),
                            files_trash=df_trash.values,
                            trash_record_days=int(trash_record_hours / 24),
-                           user=login_name,
+                           user=login_user,
                            login_user=login_user)
+
+@app.route('/user-guide')
+def user_guide():
+    login_user = request.headers.get('Oidc-Claim-Sub')
+    login_name = request.headers.get('Oidc-Claim-Fullname')
+    if login_user == None:
+        login_user = 'unknown'
+        login_name = 'unknown'
+
+    return render_template('ctb_userguide.html',user=login_user, subtitle=' - FAQ')
 
 @app.route('/ctb', methods=['GET', 'POST'])
 def ctb_run():
@@ -108,7 +118,7 @@ def ctb_run():
         if f_kinaxis_supply.filename=='' and f_allocation_supply.filename=='':
             msg = 'Pls upload either or both of the supply file: Kinaxis supply file, PCBA allocation supply file(s).'
             flash(msg,'warning')
-            return render_template('ctb_run.html', form=form, user=login_name)
+            return render_template('ctb_run.html', form=form, user=login_user)
 
         if f_kinaxis_supply.filename!='':
             file_path_kinaxis_supply = os.path.join(base_dir_upload, login_user + '_'+ secure_filename(f_kinaxis_supply.filename))
@@ -215,7 +225,7 @@ def ctb_run():
 
         return redirect(url_for('ctb_run',_external=True,_scheme='http',viewarg1=1))
 
-    return render_template('ctb_run.html', form=form,user=login_name)
+    return render_template('ctb_run.html', form=form,user=login_user)
 
 
 @app.route('/o/<login_user>/<filename>',methods=['GET'])
@@ -354,7 +364,7 @@ def ctb_admin():
                            files_uploaded=df_upload.values,
                            files_log=df_logs.values,
                            log_details=df_log_detail.values,
-                           user=login_name)
+                           user=login_user)
 
 
 @app.route('/resume', methods=['GET'])

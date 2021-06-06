@@ -10,71 +10,95 @@
     <table width="85%" align="center">
         <tr>
             <td>
-                <h2>General introductions</h2>
-                    <h3>About the input data to run the tool?</h3>
-                        <ol type="1">
+                <h2 style="color: #1a6dca">General introductions</h2>
+                    <h4>About the input data to run the tool?</h4>
+                        <li>3a4 for required DF ORG (without option, download via UOV 3a4 view AutoCTB)</li>
+                        <li>Supply data downloaded from Kinaxis (Contact SME Jully zhou if any question about how to download)</li>
+                        <li>TAN supply from PCBA allocation file</li>
+                        <b>Important note#1: Pls try to ensure consistent timing for getting above data!</b><br>
+                        <b>Important note#2: the CTB is based on these TAN/CPN supply data provided - ensure your supply data include all TAN/CPN you want to use!</b>
 
-                        </ol>
+                    <br><br>
+                    <h4>What is the order ranking priority we use?</h4>
+                    To be added.
 
-                    <h3>What is the order ranking priority we use?</h3>
-                    ...
-
-                    <h3>What is Exceptional priority?</h3>
+                    <br><br>
+                    <h4>What is Exceptional priority?</h4>
                     PSP can give an exceptional priority to a non-priority SS so they can also get an absolute high priority despite OSSD and reflect in allocation - this should be used only exceptionally.
 
                     Default priority ranking#: PR1:1; PR2:2; PR3:3; L4:4; BUP:5. PSP can set exceptional priority via the link you can find in the footer.
                     E.g., if one SS is added with Ranking# 4.1, this SS will be ranked after L4; or if added with Ranking# greater than 5, they will be after BUP; etc.
 
-                    <h3>Other exceptions considered</h3>
-                    ...
+                    <br><br>
+                    <h4>Other exceptions considered</h4>
+                    GIMS, Config issue, etc., data captured from CM CTB stored in the CM_CTB smartsheet.
 
-                <h2>Additional columns created in 3a4 and interpretations</h2>
-                    <h3>distinct_po_filter</h3>
+                <br><br>
+                <h2 style="color: #1a6dca">Additional columns created in 3a4 and interpretations</h2>
+                    <h4>distinct_po_filter</h4>
                     Duplicated rows are introduced when we explode the BOM. Filter "YES" to show just one line for one PO. This is useful especially when you simply want to sum up the "C_UNSTAGED_DOLLARS" and this will avoid duplication.
 
-                    <h3>BOM_PN</h3>
+                    <br><br>
+                    <h4>BOM_PN</h4>
                     This is generated based on "FLB_TAN".
 
-                    <h3>EXCEPTION_NAME</h3>
+                    <br><br>
+                    <h4>EXCEPTION_NAME</h4>
                     This is auto-captured from CM CTB file in smartsheet for related PO to indicate if one PO has any exceptions issues like GIMS, Config issue, etc., which prevents build.
 
-                    <h3>priority_cat</h3>
+                    <br><br>
+                    <h4>priority_cat</h4>
                     The priorities categories - PR1, PR2, PR3, L4, BUP - are collected and indicated here in this column. DPAS_RATING is also referenced to ensure order correctly categorized as PR1.
 
-                    <h3>priority_rank</h3>
+                    <br><br>
+                    <h4>priority_rank</h4>
                     This column has an integer or float number to indicate the priority ranking# for above priority categories; if there is exceptional priority input, that new exceptional ranking# is shown here instead.
 
-                    <h3>ss_overall_rank</h3>
+                    <br><br>
+                    <h4>ss_overall_rank</h4>
                     This is the final ranking for each SS based on the ranking logic we used.
 
-                    <h3>min_date</h3>
+                    <br><br>
+                    <h4>min_date</h4>
                     This is a min date of ORIGINAL_FCD_NBD_DATE and LT_TARGET_FCD; for Non_REVENUE orders it's same as CURRENT_FCD_NBD_DATE. If the dates are blank, then consider it as 30days from now.
 
-                    <h3>earliest_allowed_pack_date</h3>
+                    <br><br>
+                    <h4>earliest_allowed_pack_date</h4>
                     Default based on LT_TARGET_FCD - 30days; for MFG_HOLD or Unscheduled PO, this date must not be within 30days from today; if there are other EXCEPTIONS (Indicated in Col EXCEPTION_NAME), then this date must not be within 14days from today.
                     If order is scheduled but LT_TARGET_FCD is missing, then it follows CURRENT_FCD_NBD_DATE - 30days.
 
-                    <h3>po_ctb</h3>
+                    <br><br>
+                    <h4>po_ctb</h4>
                     This is generated based on "po_supply_ready_date", "earliest_packable_date" and FLT value.
 
-                    <h3>ss_ctb</h3>
+                    <br><br>
+                    <h4>ss_ctb</h4>
                     This is based on the latest po_ctb date within one SS.
 
-                    <h3>ss_updated_status</h3>
+                    <br><br>
+                    <h4>ss_updated_status</h4>
                     This indicates "ss_ctb" vs "CURRENT_FCD_NBD_DATE".
 
-                    <h3>RISO (as is)/RISO (to be)</h3>
+                    <br><br>
+                    <h4>RISO (as is)/RISO (to be)</h4>
                     These 2 col indicate based on LT target what's the current status based on FCD, and what's the new status based on "ss_ctb".
 
-                <h2>Summaries</h2>
-                    <h3>build_projection</h3>
+                <br><br>
+                <h2 style="color: #1a6dca">Summaries</h2>
+                    <h4>build_projection</h4>
                     Summary based on po_ctb (for date columns); aggregated into weekly buckets with Sunday as start date.
 
-                    <h3>agg_fcd_vs_ctb</h3>
+                    <br><br>
+                    <h4>agg_fcd_vs_ctb</h4>
                     Summary based on current FCD and po_ctb to indicate pull in opportunities (positive cum-delta) or risks (negative cum-delta). Columns are aggregated into weekly buckets with Sunday as start date.
 
-                    <h3>build_impact_wk0,build_impact_qend</h3>
-                    Gating items summary from current week or Qend standpoint. "OUTSIDE_WINDOW" is defined based on pack cutoff date + 30 days, e.g., for wk0, it means end of current week + 30days, for Qend, it means Qend + 30days.
+                    <br><br>
+                    <h4>build_impact_wk0,build_impact_qend</h4>
+                    Gating items summary from current week or Qend standpoint.
+                    <br>
+                    Pack cutoff is Saturday of the week; Supply cutoff is Thursday of the week. "OUTSIDE_WINDOW" is defined based on pack cutoff date + 30 days, e.g., for wk0, it means end of current week + 30days, for Qend, it means Qend + 30days.
+
+
 
 
                 <br><br>

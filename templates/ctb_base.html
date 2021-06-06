@@ -22,14 +22,19 @@
                         <td width="10%"bgcolor="#1B4F72" align="center">
                             <a href="{{ url_for('ctb_admin') }}" target=''><img src="{{ url_for('static', filename='logo1.png')}}" width="60"></a>
                         </td>
-                        <td width="80%" bgcolor="#1B4F72" align="left">
+                        <td width="75%" bgcolor="#1B4F72" align="left">
                             <br>
                             <span style="color: #f5f5f5; font-size: x-large"><strong>&nbsp;&nbsp;AutoCTB: Experimentation using full coverage supply </strong></span>
                             <br><br>
                         </td>
-                        <td width="10%" bgcolor="#1B4F72" align="left">
+                        <td width="15%" bgcolor="#1B4F72" align="left">
                             <br>
-                            <span style="color: #f5f5f5; font-size: small">Welcome, {{ user }}</span>
+                            <span style="color: #f5f5f5; font-size: medium">
+                                {{ user }} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+
+                                <a href="{{ url_for('ctb_run') }}" target=''>Home</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                                <a href="{{ url_for('user_guide') }}" target=''>?</a>
+                            </span>
                             <br><br>
                         </td>
                     </tr>
