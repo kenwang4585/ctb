@@ -780,22 +780,22 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
         offset_wk=int(cut_off[-1])
 
         if today_name == 'Monday':
-            offset = 6 + offset_wk * 7
-        elif today_name == 'Tuesday':
             offset = 5 + offset_wk * 7
-        elif today_name == 'Wednesday':
+        elif today_name == 'Tuesday':
             offset = 4 + offset_wk * 7
-        elif today_name == 'Thursday':
+        elif today_name == 'Wednesday':
             offset = 3 + offset_wk * 7
-        elif today_name == 'Friday':
+        elif today_name == 'Thursday':
             offset = 2 + offset_wk * 7
-        elif today_name == 'Saturday':
+        elif today_name == 'Friday':
             offset = 1 + offset_wk * 7
-        elif today_name == 'Sunday':
+        elif today_name == 'Saturday':
             offset = 0 + offset_wk * 7
+        elif today_name == 'Sunday':
+            offset = -1 + (offset_wk+1) * 7
 
-        pack_cut_off=today+pd.Timedelta(offset-1,'d') # Saturday of the cutoff week
-        supply_cut_off = today + pd.Timedelta(offset - 1 - FLT, 'd')  # Thursday of the cutoff week
+        pack_cut_off=today+pd.Timedelta(offset,'d') # Saturday of the cutoff week
+        supply_cut_off = today + pd.Timedelta(offset - FLT, 'd')  # Thursday of the cutoff week
 
     # update in 3a4 if supply impact cut_off week build
     impact_factor_col=cut_off + '_impact_factor'
@@ -1454,14 +1454,11 @@ def update_order_bom_to_3a4(df_3a4, df_order_bom,df_supply):
 def resample_columns_and_agg_pastdue(df,method='W-SAT',agg_col_name='Current week',total_col=None,total_row=None,convert_num=False):
     """
     Resample the data based on method specified, aggregate the pastdue, add total
-    :param df: data df to process
-    :param method: 'W-MON' for weekly or 'M', etc.
-    :return:
     """
     #重采样，并改回日期格式
     df.columns = pd.to_datetime(df.columns)
     df = df.resample(method, label='right',axis=1).sum() # when using 'W-SAT', it aggregates Sun to Sat, label as Sat
-    df.columns=df.columns.map(lambda x:x.date() - pd.to_timedelta(6,'D'))  # -6 to use Start date as the label instead
+    df.columns=df.columns.map(lambda x:x.date() - pd.to_timedelta(6,'D'))  # -6 to use Start date (Sunday) as the label instead
 
    # 生成past_due并删除相应的日期列
     today=pd.Timestamp.now().date()
@@ -2377,10 +2374,7 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
                     'supply': df_supply,
                    }
     # save the output file
-    #orgs='_'.join(org_list)
-
-    dt=(pd.Timestamp.now()+pd.Timedelta(hours=8)).strftime('%m-%d %Hh%Mm') #convert from server time to local
-
+    dt=pd.Timestamp.now().strftime('%m-%d %Hh%Mm')
     output_filename = org + ' CTB'
     if bu_list!=['']:
         bu = '_'.join(bu_list)

@@ -36,7 +36,7 @@
                     This is generated based on "FLB_TAN".
 
                     <h3>EXCEPTION_NAME</h3>
-                    Maintained by user for related PO to indicate if one PO has any exceptions issues like GIMS, Config issue, etc., which prevents build.
+                    This is auto-captured from CM CTB file in smartsheet for related PO to indicate if one PO has any exceptions issues like GIMS, Config issue, etc., which prevents build.
 
                     <h3>priority_cat</h3>
                     The priorities categories - PR1, PR2, PR3, L4, BUP - are collected and indicated here in this column. DPAS_RATING is also referenced to ensure order correctly categorized as PR1.
@@ -66,8 +66,18 @@
                     <h3>RISO (as is)/RISO (to be)</h3>
                     These 2 col indicate based on LT target what's the current status based on FCD, and what's the new status based on "ss_ctb".
 
+                <h2>Summaries</h2>
+                    <h3>build_projection</h3>
+                    Summary based on po_ctb (for date columns); aggregated into weekly buckets with Sunday as start date.
 
-               <br><br>
+                    <h3>agg_fcd_vs_ctb</h3>
+                    Summary based on current FCD and po_ctb to indicate pull in opportunities (positive cum-delta) or risks (negative cum-delta). Columns are aggregated into weekly buckets with Sunday as start date.
+
+                    <h3>build_impact_wk0,build_impact_qend</h3>
+                    Gating items summary from current week or Qend standpoint. "OUTSIDE_WINDOW" is defined based on pack cutoff date + 30 days, e.g., for wk0, it means end of current week + 30days, for Qend, it means Qend + 30days.
+
+
+                <br><br>
                 
             </td>
         </tr>
