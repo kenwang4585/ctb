@@ -79,7 +79,7 @@ def ctb_run():
     if form.validate_on_submit():
         log_msg_main = []
         start_time = pd.Timestamp.now()
-        print('start to run: {}'.format(start_time.strftime('%Y-%m-%d %H:%M')))
+        print('start to run for {}: {}'.format(login_user,start_time.strftime('%Y-%m-%d %H:%M')))
 
         log_msg = '\n\n[' + login_user + '] ' + start_time.strftime('%Y-%m-%d %H:%M')
         add_log_details(msg=log_msg)

@@ -810,15 +810,6 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
     # add addressable column
     build_window=pack_cut_off+pd.Timedelta(30,'d')
     if pack_cut_off<=today + pd.Timedelta(14,'d'): # within 2 weeks
-        """
-        df_3a4.loc[:, addr_col] = np.where(df_3a4.ADDRESSABLE_FLAG.isin(['MFG_HOLD','NOT_ADDRESSABLE','UNSCHEDULED']),
-                                                    df_3a4.ADDRESSABLE_FLAG,
-                                                    np.where(df_3a4.EXCEPTION_NAME.notnull(),
-                                                            'GIMS/Config/etc',
-                                                             np.where(df_3a4.earliest_allowed_pack_date>build_window,
-                                                                      'OUTSIDE_WINDOW',
-                                                                      None)))
-        """
         df_3a4.loc[:, addr_col] = np.where(df_3a4.earliest_allowed_pack_date > build_window,
                                            'OUTSIDE_WINDOW',
                                            np.where(df_3a4.ADDRESSABLE_FLAG.isin(['MFG_HOLD', 'UNSCHEDULED']),
@@ -841,48 +832,13 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
                                                                     df_3a4.BOM_PN,
                                                                     None)))
 
-    """
-   if cut_off=='wk0':
-        df_3a4.loc[:, impact_factor_col] = np.where(df_3a4.ADDRESSABLE_FLAG.isin(['MFG_HOLD','NOT_ADDRESSABLE','UNSCHEDULED']),
-                                                    df_3a4.ADDRESSABLE_FLAG,
-                                                    np.where(df_3a4.po_ctb<=pack_cut_off,
-                                                             'GO',
-                                                             np.where(df_3a4.EXCEPTION_NAME.notnull(),
-                                                                      'GIMS/Config/etc',
-                                                                      np.where((df_3a4.tan_supply_ready_date.isnull())|(df_3a4.tan_supply_ready_date>supply_cut_off),
-                                                                                df_3a4.BOM_PN,
-                                                                               None)
-                                                                      )))
-    else: # the the addressable is not following the flag (different from wk0); and hold/unscheudle...etc mot different from wk0
-        df_3a4.loc[:, impact_factor_col] = np.where(df_3a4.earliest_allowed_pack_date>build_window,
-                                                    'NOT_ADDRESSABLE', # this addressable considered build window - different from wk0 which is following the flag
-                                                    np.where(df_3a4.po_ctb<=pack_cut_off,
-                                                             'GO',
-                                                             np.where(df_3a4.po_ctb>=df_3a4.earliest_allowed_pack_date,# due to material
-                                                                      np.where(df_3a4.ADDRESSABLE_FLAG == 'MFG_HOLD',
-                                                                               'MFG_HOLD',
-                                                                               np.where(df_3a4.CURRENT_FCD_NBD_DATE.isnull(),
-                                                                                       'UNSCHEDULED',
-                                                                                       np.where(df_3a4.EXCEPTION_NAME.notnull(),
-                                                                                               'GIMS/Config/etc',
-                                                                                               np.where((df_3a4.tan_supply_ready_date.isnull()) | (df_3a4.tan_supply_ready_date > supply_cut_off),
-                                                                                                      df_3a4.BOM_PN,
-                                                                                                      None)
-                                                                                                )
-                                                                                        )
-                                                                               )
-                                                                      )
-                                                             )
-                                                    )
-    """
 
     # 添加数量列(shortage by the supply cut off date)
     dfx = df_3a4[(df_3a4.earliest_allowed_pack_date<=pack_cut_off) &
                      (df_3a4.po_pn.isin(blg_with_allocation.keys())) &
-                     (~df_3a4[impact_factor_col].isin(['UNSCHEDULED','MFG_HOLD','GIMS/Config/etc','NOT_ADDRESSABLE','GO']))&
+                     (~df_3a4[impact_factor_col].isin(['UNSCHEDULED','MFG_HOLD','GIMS/Config/etc','OUTSIDE_WINDOW','GO']))&
                      (df_3a4[impact_factor_col].notnull())]
 
-    #df_3a4.loc[:, impact_qty_col] = None # add this in case below does not create this col
     df_3a4.loc[:,impact_qty_col] = None
     for row in dfx.iterrows():
         po_pn = row[1].po_pn
@@ -896,7 +852,7 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
 
     # create the gating pn col and indicate whether is top gating or non-top gating
     df_3a4.loc[:,gating_col_name]=np.where(df_3a4[impact_factor_col].notnull(),
-                                            np.where(df_3a4[impact_factor_col].isin(['UNSCHEDULED','MFG_HOLD','GIMS/Config/etc','NOT_ADDRESSABLE','GO']),
+                                            np.where(df_3a4[impact_factor_col].isin(['UNSCHEDULED','MFG_HOLD','GIMS/Config/etc','OUTSIDE_WINDOW','GO']),
                                                         'YES',
                                                         np.where((df_3a4.tan_supply_ready_date.isnull())|(df_3a4.tan_supply_ready_date==df_3a4.po_supply_ready_date),
                                                                          'YES',
@@ -907,7 +863,7 @@ def make_summary_build_impact(df_3a4,df_supply,output_col,qend,blg_with_allocati
     df_top_gating=df_3a4[df_3a4[gating_col_name]=='YES']
     df_top_gating_duplicated_po_pn=df_top_gating[df_top_gating.duplicated('PO_NUMBER')].po_pn
     df_3a4.loc[:,gating_col_name]=np.where(df_3a4.po_pn.isin(df_top_gating_duplicated_po_pn),
-                                            np.where(df_3a4[impact_factor_col].isin(['UNSCHEDULED','MFG_HOLD','GIMS/Config/etc','NOT_ADDRESSABLE','GO']),
+                                            np.where(df_3a4[impact_factor_col].isin(['UNSCHEDULED','MFG_HOLD','GIMS/Config/etc','OUTSIDE_WINDOW','GO']),
                                                      None,
                                                      'NO'),
                                             df_3a4[gating_col_name])
