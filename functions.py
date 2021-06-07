@@ -2518,12 +2518,12 @@ def change_supply_to_versionless_and_addup_kinaxis_supply(df_supply_kinaxis,pn_c
     return df_supply_kinaxis
 
 #@write_log_time_spent
-def process_kinaxis_supply(df_supply_kinaxis,class_code_exclusion):
+def process_kinaxis_supply(df_supply_kinaxis,class_code_exclusion,org):
     """
     Read supply data, CT2R (for CM collected data), and exceptional backlog (input input), and processed into the
     final format after exclude the packaging and label class codes. Also save the Kinaxis file with org in filename.
     """
-    df_supply_kinaxis=initial_process_kinaxis_supply(df_supply_kinaxis)
+    df_supply_kinaxis=initial_process_kinaxis_supply(df_supply_kinaxis,org)
     df_supply_kinaxis=exclude_pn_no_need_to_consider_from_kinaxis_supply(df_supply_kinaxis, class_code_exclusion)
     df_supply_kinaxis=change_supply_to_versionless_and_addup_kinaxis_supply(df_supply_kinaxis,pn_col='TAN')
 
