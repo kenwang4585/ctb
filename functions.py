@@ -2409,10 +2409,13 @@ def decide_qend_date(qend_list):
     return qend
 
 @write_log_time_spent
-def initial_process_kinaxis_supply(df_supply_kinaxis):
+def initial_process_kinaxis_supply(df_supply_kinaxis,org):
     """
     从kinaxis文件中读取supply数据，去除不要的列; 并按Org存储新文件
     """
+    #提取需要的org
+    df_supply_kinaxis=df_supply_kinaxis[df_supply_kinaxis.ORG==org].copy()
+
     #判断位置并取出需要的信息
     col=df_supply_kinaxis.columns
     ind = col.tolist().index('Past') - 1

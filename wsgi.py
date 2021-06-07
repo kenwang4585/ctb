@@ -129,7 +129,7 @@ def ctb_run():
         if f_allocation_supply.filename!='':
             file_path_allocation_supply = os.path.join(base_dir_upload,login_user + '_' + secure_filename(f_allocation_supply.filename))
             f_allocation_supply.save(file_path_allocation_supply)
-            add_log_details(msg='\nSupply Kinaxis: ' + f_allocation_supply.filename)
+            add_log_details(msg='\nSupply PCBA allocation: ' + f_allocation_supply.filename)
             log_msg_main.append('PCBA allocation supply')
 
         # save 3a4 file
@@ -157,7 +157,7 @@ def ctb_run():
                     return redirect(url_for('ctb_run', _external=True, _scheme='http', viewarg1=1))
 
                 # 处理 kinaxis supply data (oh_date used in allocation supply OH to use same date)
-                df_supply_kinaxis = process_kinaxis_supply(df_supply_kinaxis, class_code_exclusion)
+                df_supply_kinaxis = process_kinaxis_supply(df_supply_kinaxis, class_code_exclusion,org)
             else:
                 df_supply_kinaxis=pd.DataFrame()
 
