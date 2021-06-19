@@ -2,7 +2,7 @@ from flask import Flask
 #from flask_wtf.file import FileField
 from flask_wtf import FlaskForm
 from wtforms.validators import DataRequired
-from wtforms import SubmitField, StringField, MultipleFileField, FileField
+from wtforms import SubmitField, StringField, MultipleFileField, FileField, SelectMultipleField
 import os
 from flask_sqlalchemy import SQLAlchemy
 

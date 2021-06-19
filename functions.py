@@ -65,9 +65,6 @@ def created_supply_dict_per_df_supply(df_supply):
                '800-42925-01':[{'2/12':4},{'2/13':3},{'2/15':12},{'2/23':25},{'3/1':8},{'3/6':10}]}
     """
 
-    df_supply.duplicated().to_excel('test0.xlsx')
-    #df_supply.fillna(0,inplace=True)
-    df_supply.to_excel('test1.xlsx')
     #print(df_supply.loc['10-2366',:])
     supply_dic_tan = {}
     col=df_supply.columns
@@ -104,7 +101,7 @@ def create_blg_dict_per_sorted_3a4_and_selected_tan(df_3a4, supply_dic_tan):
     for pn in tan:
         dfm = dfx[dfx.BOM_PN == pn]
         org_qty_po = []
-        for org, qty, po, min_date in zip(dfm.ORGANIZATION_CODE, dfm.C_UNSTAGED_QTY, dfm.PO_NUMBER,
+        for org, qty, po, min_date in zip(dfm.ORGANIZATION_CODE, dfm.unpacked_qty, dfm.PO_NUMBER,
                                                       dfm.min_date):
             if qty > 0:
                 org_qty_po.append({org: (qty, (po, min_date))})
@@ -1435,8 +1432,9 @@ def update_order_bom_to_3a4(df_3a4, df_order_bom,df_supply):
                                    df_3a4.PN)
     """
     # correct the quantity by multiplying BOM Qty
-    df_3a4.loc[:, 'C_UNSTAGED_QTY']=df_3a4.C_UNSTAGED_QTY * (df_3a4.TAN_QTY/df_3a4.ORDERED_QUANTITY)
-    df_3a4.loc[:, 'ORDERED_QUANTITY'] = df_3a4.TAN_QTY
+    df_3a4.loc[:, 'C_UNSTAGED_QTY']=df_3a4.C_UNSTAGED_QTY * (df_3a4.BOM_PN_QTY/df_3a4.ORDERED_QUANTITY)
+    df_3a4.loc[:, 'unpacked_qty'] = df_3a4.unpacked_qty * (df_3a4.BOM_PN_QTY / df_3a4.ORDERED_QUANTITY)
+    df_3a4.loc[:, 'ORDERED_QUANTITY'] = df_3a4.BOM_PN_QTY
 
     # add indicator for distinct PO filtering
     df_3a4.loc[:,'distinct_po_filter']=np.where(~df_3a4.duplicated('PO_NUMBER'),
@@ -1927,39 +1925,55 @@ def make_sd_summary(df_3a4,df_supply,supply_source,date_col='min_date'):
     return df_sd_combined
 
 @write_log_time_spent
-def generate_df_order_bom_from_flb_tan_col(df_3a4):
+def generate_df_order_bom_from_flb_tan_col(df_3a4, df_supply, tan_group):
     """
     Generate the BOM usage file from the FLB_TAN col
-    :param df_3a4:
-    :return:
     """
-    regex_pn = re.compile(r'\d{2,3}-\d{4,7}')
+    regex_pn = re.compile(r'\d{2,3}-\d{3,7}')
     regex_usage = re.compile(r'\([0-9.]+\)')
 
-    df_flb_tan = df_3a4[df_3a4.FLB_TAN.notnull()][['PO_NUMBER','PRODUCT_ID','ORDERED_QUANTITY','FLB_TAN']].copy()
-    #df_flb_tan.drop_duplicates(['PRODUCT_ID'], keep='first', inplace=True)
+    df_flb_tan = df_3a4[df_3a4.FLB_TAN.notnull()][['PO_NUMBER', 'PRODUCT_ID', 'ORDERED_QUANTITY', 'FLB_TAN']].copy()
+    # df_flb_tan.drop_duplicates(['PRODUCT_ID'], keep='first', inplace=True)
 
-    po_list=[]
+    po_list = []
     pn_list = []
     usage_list = []
+    error_pn = []
     for row in df_flb_tan.itertuples(index=False):
-        po=row.PO_NUMBER
+        po = row.PO_NUMBER
         flb_tan = row.FLB_TAN
-        #order_qty = row.ORDERED_QUANTITY
+        # order_qty = row.ORDERED_QUANTITY
+        flb_tan = flb_tan.split('|')
 
-        pn = regex_pn.findall(flb_tan)
-        usage = regex_usage.findall(flb_tan)
-        usage = [float(u[1:-1]) for u in usage]
-        po_list += [po] * len(pn)
-        pn_list += pn
-        usage_list += usage
-        """
-        if len(pn)!=len(usage):# 检查错误
-            print('Extracting FLB_TAN error:',po,'# of PN:',len(pn),'; # of usage:',len(usage))
-        """
-    df_order_bom_from_flb = pd.DataFrame({'PO_NUMBER': po_list, 'BOM_PN': pn_list, 'TAN_QTY': usage_list})
+        for item in flb_tan:
+            try:
+                pn = regex_pn.search(item).group()
+                usage = regex_usage.search(item).group()
+                usage = float(usage[1:-1])
+
+                # collect the BOM PN if that TAN exist in the supply file or grouping
+                if pn in tan_group.keys():
+                    pn = tan_group[pn]
+                    po_list.append(po)
+                    pn_list.append(pn)
+                    usage_list.append(usage)
+                elif pn in df_supply.index:
+                    po_list.append(po)
+                    pn_list.append(pn)
+                    usage_list.append(usage)
+            except:
+                error_pn.append(item)
+
+    if len(error_pn)>0:
+        print('Error in regex TAN from FLB_TAN for below PN:', error_pn)
+        tan_regex_error='Error in regex TAN from FLB_TAN for below PN:'.format(error_pn)
+        add_log_details(msg=tan_regex_error)
+
+    # print(po_list)
+    df_order_bom_from_flb = pd.DataFrame({'PO_NUMBER': po_list, 'BOM_PN': pn_list, 'BOM_PN_QTY': usage_list})
 
     return df_order_bom_from_flb
+
 
 @write_log_time_spent
 def get_packed_or_cancelled_ss_from_3a4(df_3a4):
@@ -2264,6 +2278,114 @@ def make_summary_fcd_vs_ctb(df_3a4):
     return dfc
 
 
+@write_log_time_spent
+def change_pn_to_versionless(df, pn_col='TAN'):
+    """
+    Change PN to versionless.
+    :param df: the supply df or oh df
+    :param pn_col: name of the PN col. In Cm supply file it's PN, in Kinaxis file it's TAN.
+    :return:
+    """
+
+    regex = re.compile(r'\d{2,3}-\d{4,7}')
+
+    # convert to versionless and add temp col
+    df.reset_index(inplace=True)
+    df.loc[:, pn_col] = df[pn_col].map(lambda x: regex.search(x).group())
+
+    return df
+
+@write_log_time_spent
+def add_up_supply_by_pn(df_supply, pn_col='TAN'):
+    """
+    Add up qty (in pivoted format) for supply, OH, transit, etc.
+    Param df: the datafram
+    Param corg_col: col for org
+    Param pn_col: col for PN
+    """
+    # add up the duplicate PN (due to multiple versions)
+    df_supply.sort_index(inplace=True)
+    df_supply.reset_index(inplace=True)
+    dup_pn = df_supply[df_supply.duplicated(pn_col)][pn_col].unique()
+    df_sum = pd.DataFrame(columns=df_supply.columns)
+
+    df_sum.set_index(pn_col, inplace=True)
+    df_supply.set_index(pn_col, inplace=True)
+
+    for pn in dup_pn:
+        # print(df_supply[df_supply.PN==pn].sum(axis=1).sum())
+        df_sum.loc[pn, :] = df_supply.loc[pn, :].sum(axis=0)
+
+    df_supply.drop(dup_pn, axis=0, inplace=True)
+    df_supply = pd.concat([df_supply, df_sum])
+
+    return df_supply
+
+@write_log_time_spent
+def read_tan_grouping_from_db():
+    '''
+    Read TAN group mapping and tan-group sourcing from smartsheet; change to version during processing.
+    :return:
+    '''
+    """
+    # 从smartsheet读取backlog
+    token = os.getenv('ALLOCATION_TOKEN')
+    sheet_id = os.getenv('TAN_GROUP_ID')
+    proxies = None  # for proxy server
+    smartsheet_client = SmartSheetClient(token, proxies)
+    df_grouping = smartsheet_client.get_sheet_as_df(sheet_id, add_row_id=True, add_att_id=False)
+
+    df_grouping = df_grouping[(df_grouping.Group_name.notnull()) & (df_grouping.TAN.notnull())]
+    """
+    df_grouping=read_table('allocation_tan_grouping')
+
+    #  chagne to versionless
+    df_grouping=change_pn_to_versionless(df_grouping, pn_col='TAN')
+
+    #
+    tan_group = {} #{TAN: Group}
+    tan_group_sourcing = [] # [org-group]
+    for row in df_grouping.itertuples():
+        tan_group[row.TAN] = row.Group_name
+        df_orgs=row.DF.split('/')
+        df_orgs = [org.strip().upper() for org in df_orgs]
+        for org in df_orgs:
+            tan_group_sourcing.append(org + '-' + row.Group_name)
+
+    #df_grouping.drop(['index', 'row_id'], axis=1, inplace=True)
+    df_grouping.set_index('Group_name', inplace=True)
+
+    return df_grouping, tan_group, tan_group_sourcing
+
+
+@write_log_time_spent
+def apply_tan_group_on_supply(df_supply, tan_group):
+    """
+    Convert the PN in df_supply accordingly to tan_group
+    """
+    df_supply.reset_index(inplace=True)
+    df_supply.loc[:,'TAN'] = df_supply.TAN.map(lambda x: tan_group[x] if x in tan_group.keys() else x)
+    df_supply.set_index(['TAN'], inplace=True)
+
+    return df_supply
+
+
+@write_log_time_spent
+def create_unpacked_qty_col_in_3a4(df_3a4):
+    """
+    Generate the unpacked qty col in 3a4 based on "PACKOUT_QUANTITY"
+    """
+    regex = re.compile(r'^\d+')
+    df_3a4.loc[:, 'PACKOUT_QUANTITY_temp']=df_3a4.PACKOUT_QUANTITY
+    df_3a4.PACKOUT_QUANTITY_temp.fillna('', inplace=True)
+    df_3a4.loc[:, 'packed_qty'] = df_3a4.PACKOUT_QUANTITY_temp.map(lambda x: int(regex.search(x).group()) if regex.search(x) != None else 0)
+    df_3a4.loc[:, 'unpacked_qty']=df_3a4.ORDERED_QUANTITY-df_3a4.packed_qty
+
+    df_3a4.drop(['PACKOUT_QUANTITY_temp'], axis=1, inplace=True)
+
+    return df_3a4
+
+
 def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend_list,output_col,login_user):
     """
     Consolidated main functions for this programs.
@@ -2281,6 +2403,9 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
     qend=decide_qend_date(qend_list)
     # Do basic data processing for 3a4
     df_3a4 = basic_data_processing_3a4(df_3a4)
+
+    # create unpacked qty col
+    df_3a4 = create_unpacked_qty_col_in_3a4(df_3a4)
 
     # split out the 0 ordered quantity orders
     df_3a4, df_3a4_zero_qty = pick_out_zero_qty_order(df_3a4)
@@ -2300,11 +2425,19 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
     # sort and rank the orders with overall priority (e.g.: ranking_col = ['priority_rank', 'partiak_rank','ss_rev_rank', 'min_date', 'SO_SS', 'PO_NUMBER'])
     df_3a4=ss_ranking_overall_new_december(df_3a4, ss_exceptional_priority, ranking_col,order_col='SO_SS', new_col='ss_overall_rank')
 
+    # Read TAN group mapping from db
+    df_grouping, tan_group, tan_group_sourcing = read_tan_grouping_from_db()
+
    # (do below after ranking)Add TAN into 3a4 based on BOM
-    df_bom = generate_df_order_bom_from_flb_tan_col(df_3a4)
+    df_bom = generate_df_order_bom_from_flb_tan_col(df_3a4, df_supply, tan_group)
     df_3a4 = update_order_bom_to_3a4(df_3a4, df_bom,df_supply)
 
-     #  生成supply_dic_tan
+    # convert PN in df_supply per tan_group
+    df_supply = apply_tan_group_on_supply(df_supply, tan_group)
+    # Add up supply... below is different from usual
+    df_supply = add_up_supply_by_pn(df_supply, pn_col='TAN')
+
+    #  生成supply_dic_tan
     supply_dic_tan = created_supply_dict_per_df_supply(df_supply)
 
     # create backlog dict for Tan require allocation
@@ -2318,7 +2451,7 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
     #df_3a4[['PO_NUMBER','OPTION_NUMBER','PRODUCT_ID','PN','C_UNSTAGED_QTY','tan_supply_ready_date','supply_allocation']].to_excel('test.xlsx')
 
     # calculate the PO supply ready date and add to 3a4 - based on 3a4 及 supply中共同包含的tan
-    pn_to_consider = np.intersect1d(df_supply.index.tolist(), df_3a4[df_3a4.C_UNSTAGED_QTY > 0].BOM_PN.unique().tolist())
+    pn_to_consider = np.intersect1d(df_supply.index.tolist(), df_3a4[df_3a4.unpacked_qty > 0].BOM_PN.unique().tolist())
     df_3a4 = calculate_po_supply_ready_date_and_add_to_3a4(df_3a4, pn_to_consider)
     # 去除不考虑的BOM_PM (不能去除 mark "yes" distinct_po_filter)
     #df_3a4=df_3a4[df_3a4.BOM_PN.isin(pn_to_consider)].copy()
@@ -2342,8 +2475,8 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
 
     # make summaries
     df_po_ctb=make_summary_build_projection(df_3a4,bu_list)
-    df_decommit_improve_summary=make_summary_decommit_vs_improve(df_3a4)
-    df_riso = make_summary_riso(df_3a4)
+    #df_decommit_improve_summary=make_summary_decommit_vs_improve(df_3a4)
+    #df_riso = make_summary_riso(df_3a4)
     df_fcd_ctb_summary=make_summary_fcd_vs_ctb(df_3a4)
 
     # make supply/demand summaries:for shortage PN
@@ -2358,8 +2491,8 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
     data_to_write={
                     'build_projection':df_po_ctb,
                    'agg_fcd_vs_ctb':df_fcd_ctb_summary,
-                  'ss_decommit_vs_pullin':df_decommit_improve_summary,
-                   'riso_status':df_riso,
+                  #'ss_decommit_vs_pullin':df_decommit_improve_summary,
+                   #'riso_status':df_riso,
                    #'sd_shortage_pn(vs LT target)':df_sd_combined_short,
                    'build_impact_wk0':build_impact_summary_wk0,
                     #'build_impact_wk1':build_impact_summary_wk1,
@@ -2516,6 +2649,7 @@ def change_supply_to_versionless_and_addup_kinaxis_supply(df_supply_kinaxis,pn_c
     df_supply_kinaxis = pd.concat([df_supply_kinaxis, df_sum])
 
     return df_supply_kinaxis
+
 
 #@write_log_time_spent
 def process_kinaxis_supply(df_supply_kinaxis,class_code_exclusion,org):

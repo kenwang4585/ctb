@@ -33,9 +33,9 @@ required_3a4_col=['SO_SS', 'PO_NUMBER', 'ORGANIZATION_CODE', 'BUSINESS_UNIT',
 output_col=['ORGANIZATION_CODE', 'BUSINESS_UNIT', 'PRODUCT_FAMILY', 'SO_SS', 'PO_NUMBER','distinct_po_filter', 'EXCEPTION_NAME','PRODUCT_ID',
            'BOM_PN','ADDRESSABLE_FLAG','priority_cat','priority_rank','ss_overall_rank','LINE_CREATION_DATE',
            'CURRENT_FCD_NBD_DATE','ORIGINAL_FCD_NBD_DATE', 'LT_TARGET_FCD','CUSTOMER_REQUESTED_SHIP_DATE','REVENUE_NON_REVENUE','C_UNSTAGED_DOLLARS',
-            'ORDERED_QUANTITY','C_UNSTAGED_QTY','PACKOUT_QUANTITY','supply_allocation','tan_qty_wo_supply',
+            'ORDERED_QUANTITY','C_UNSTAGED_QTY','unpacked_qty','PACKOUT_QUANTITY','supply_allocation','tan_qty_wo_supply',
             'tan_supply_ready_date','po_supply_ready_date', 'earliest_allowed_pack_date','earliest_allowed_pack_date_factor','po_ctb', 'ctb_comment','ss_ctb',
-            'ss_updated_status', 'CTB_STATUS(CTB_UI)','GLOBAL_RANK','RISO (as is)','RISO (to be)']
+            'ss_updated_status', 'CTB_STATUS(CTB_UI)','GLOBAL_RANK']
 
 # used temporarily when output testing file
 test_col=['PO_NUMBER','OPTION_NUMBER','PRODUCT_ID','PN','C_UNSTAGED_QTY','tan_supply_ready_date','supply_allocation']

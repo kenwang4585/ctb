@@ -179,7 +179,6 @@ def ctb_run():
 
             # concat allocation PCBA data to Kinaxis data (remove same TAN from kinaxis file if exist)
             df_supply = consolidate_allocated_pcba_and_kinaxis(df_supply_allocation_combined, df_supply_kinaxis)
-
             # 选择相关的org/bu
             df_3a4 = limit_3a4_org_and_bu(df_3a4,org,bu_list)
 
