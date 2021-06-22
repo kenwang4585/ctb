@@ -2428,10 +2428,6 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
     # Read TAN group mapping from db
     df_grouping, tan_group, tan_group_sourcing = read_tan_grouping_from_db()
 
-   # (do below after ranking)Add TAN into 3a4 based on BOM
-    df_bom = generate_df_order_bom_from_flb_tan_col(df_3a4, df_supply, tan_group)
-    df_3a4 = update_order_bom_to_3a4(df_3a4, df_bom,df_supply)
-
     # convert PN in df_supply per tan_group
     df_supply = apply_tan_group_on_supply(df_supply, tan_group)
     # Add up supply... below is different from usual
@@ -2439,6 +2435,13 @@ def main_program_all(df_3a4,org, bu_list, description,ranking_col,df_supply,qend
 
     #  生成supply_dic_tan
     supply_dic_tan = created_supply_dict_per_df_supply(df_supply)
+
+   # (do below after ranking)Add TAN into 3a4 based on BOM
+    df_bom = generate_df_order_bom_from_flb_tan_col(df_3a4, df_supply, tan_group)
+    df_3a4 = update_order_bom_to_3a4(df_3a4, df_bom, df_supply)
+    df_3a4[['PO_NUMBER','BOM_PN','BUSINESS_UNIT']].to_excel('test_3a4.xlsx')
+    print(df_bom)
+    raise ValueError
 
     # create backlog dict for Tan require allocation
     blg_dic_tan = create_blg_dict_per_sorted_3a4_and_selected_tan(df_3a4, supply_dic_tan)
