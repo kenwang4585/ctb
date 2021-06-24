@@ -373,7 +373,7 @@ def read_3a4_and_check_format(file_path_3a4,required_3a4_col):
     missing_3a4_col=np.setdiff1d(required_3a4_col,col_3a4)
 
     if len(missing_3a4_col)>0:
-        error_msg='Error! 3a4 are missing following colums: {}. Pls ensure to use 3a4 view kw_CTB to download 3a4.'
+        error_msg='Error! 3a4 are missing following colums: {}. Pls ensure to use 3a4 view kw_CTB to download 3a4.'.format(missing_3a4_col)
     else:
         error_msg=''
 
@@ -501,6 +501,7 @@ def consolidate_allocated_pcba_and_kinaxis(df_supply_allocation_combined,df_supp
 
     # concat both supply files
     df_supply=pd.concat([df_supply_kinaxis,df_supply_allocation_combined],sort=True)
+    df_supply.to_excel('test.xlsx')
 
     # add up the duplicate PN (due to multiple versions)
     df_supply.sort_index(inplace=True)
